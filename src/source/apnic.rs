@@ -29,11 +29,12 @@ pub fn parse_ip_data(content: &str) -> Vec<IpNet> {
         .filter(|item| item.len() >= 5)
         .filter(|item| item[0] == "apnic" && item[1] == "CN" && ["ipv4", "ipv6"].contains(&item[2]))
         .map(|item| {
-            IpNet::new(
-                IpAddr::from_str(item[3]).unwrap(),
-                32 - (item[4].parse::<u32>().unwrap() as f32).log2() as u8,
-            )
-            .unwrap()
+            let prefix_len = if item[2] == "ipv4" {
+                32 - (item[4].parse::<u32>().expect("item[4] must be a number") as f32).log2() as u8
+            } else {
+                item[4].parse::<u8>().expect("item[4] must be a number")
+            };
+            IpNet::new(IpAddr::from_str(item[3]).unwrap(), prefix_len).unwrap()
         })
         .collect()
 }

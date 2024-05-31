@@ -5,7 +5,6 @@ edition = "2021"
 
 [dependencies]
 ipnet = "2.9.0"
-reqwest = { version = "0.12.4", features = ["blocking"] }
 thiserror = "1.0.61"
 enum-tools = "0.5.3"
 net-route = "0.4.3"
@@ -14,10 +13,17 @@ tokio = { version = "1.38.0", features = ["rt", "macros", "rt-multi-thread"] }
 futures-util = "0.3.30"
 netdev = "0.27.0"
 log = "0.4.21"
+# openssl = { version = "0.10.64", features = ["vendored"] }
 
 clap = { version = "4.5.4", features = ["derive"], optional = true }
 colored = { version = "2.1.0", optional = true }
 env_logger = { version = "*", optional = true }
+tap = "1.0.1"
+
+[dependencies.reqwest]
+version = "0.12.4"
+features = ["blocking", "rustls-tls"]
+default-features = false
 
 [features]
 build-binary = ["clap", "colored", "env_logger"]

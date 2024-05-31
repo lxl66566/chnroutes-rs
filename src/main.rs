@@ -26,6 +26,7 @@ pub struct ExportArgs {
     platform: Option<String>,
 }
 
+// TODO: deal with source
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)

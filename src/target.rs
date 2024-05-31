@@ -4,6 +4,7 @@ use ipnet::IpNet;
 
 use crate::{source::Source, Error, Result};
 
+/// The Targets for exporting scripts, like chnroutes.py do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Target {
     OpenVPN(u32),

@@ -2,8 +2,7 @@ use std::{env, env::temp_dir, io, path::PathBuf, time::Duration};
 
 use crate::error::CacheError;
 
-/// A file Cache with an expire time, to store IP source file for a few (7)
-/// days.
+/// A file Cache with an expire time, to store IP source file for a few days.
 pub struct Cache {
     name: String,
     expire_time: Duration,

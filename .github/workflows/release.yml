@@ -81,9 +81,12 @@ jobs:
       - name: Install openssl on macos if needed
         if: startsWith(matrix.os, 'macos')
         run: grep -q 'openssl' 'Cargo.lock' && brew install openssl
-      # - name: Install openssl on windows
-      #   if: startsWith(matrix.os, 'windows')
-      #   run: choco install openssl
+      - name: Set Perl environment variables
+        if: runner.os == 'Windows'
+        run: |
+          echo "PERL=$((where.exe perl)[0])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          echo "OPENSSL_SRC_PERL=$((where.exe perl)[0])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # choco install openssl strawberryperl
 
       - name: Build and Upload
         uses: taiki-e/upload-rust-binary-action@v1
