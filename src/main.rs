@@ -9,19 +9,24 @@ use colored::Colorize;
 pub struct Cli {
     #[command(subcommand)]
     pub subcommand: Subcommand,
+    /// WIP: source to generate ip rules
     #[arg(short, long)]
     source: Option<String>,
 }
 
 #[derive(Debug, clap::Subcommand, Clone)]
 pub enum Subcommand {
+    /// Export up and down scripts for windows, mac, linux, android, openvpn
     Export(ExportArgs),
+    /// Write IP rules to system route table
     Up,
+    /// Remove IP rules from system route table
     Down,
 }
 
 #[derive(Debug, clap::Args, Clone)]
 pub struct ExportArgs {
+    /// The platform of script you want to export
     #[arg(short, long)]
     platform: Option<String>,
 }

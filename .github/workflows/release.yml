@@ -43,9 +43,9 @@ jobs:
           - os: macos-latest
             target: aarch64-apple-darwin
             compress: true
-          - os: ubuntu-latest
-            target: x86_64-unknown-freebsd
-            compress: true
+          # - os: ubuntu-latest
+          #   target: x86_64-unknown-freebsd
+          #   compress: true
 
     # The type of runner that the job will run on
     # Runs on Ubuntu if other os is not specified above
@@ -77,16 +77,16 @@ jobs:
 
       - name: Install openssl on ubuntu if needed
         if: startsWith(matrix.os, 'ubuntu')
-        run: grep -q 'openssl' 'Cargo.lock' && sudo apt install pkg-config libssl-dev
+        run: grep -q 'openssl' 'Cargo.lock' && sudo apt install pkg-config libssl-dev || true
       - name: Install openssl on macos if needed
         if: startsWith(matrix.os, 'macos')
-        run: grep -q 'openssl' 'Cargo.lock' && brew install openssl
-      - name: Set Perl environment variables
-        if: runner.os == 'Windows'
-        run: |
-          echo "PERL=$((where.exe perl)[0])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          echo "OPENSSL_SRC_PERL=$((where.exe perl)[0])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          # choco install openssl strawberryperl
+        run: grep -q 'openssl' 'Cargo.lock' && brew install openssl || true
+      # - name: Set Perl environment variables
+      #   if: runner.os == 'Windows'
+      #   run: |
+      #     # choco install openssl strawberryperl
+      #     echo "PERL=$((where.exe perl)[0])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      #     echo "OPENSSL_SRC_PERL=$((where.exe perl)[0])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Build and Upload
         uses: taiki-e/upload-rust-binary-action@v1
