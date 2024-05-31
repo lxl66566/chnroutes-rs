@@ -5,7 +5,7 @@ use colored::Colorize;
 
 #[derive(Parser, Clone, Debug)]
 #[command(author, version, about, long_about = None)]
-#[clap(args_conflicts_with_subcommands = true)]
+// #[clap(args_conflicts_with_subcommands = true)]
 pub struct Cli {
     #[command(subcommand)]
     pub subcommand: Subcommand,
@@ -27,15 +27,20 @@ pub struct ExportArgs {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Info)
+        .format_target(false)
+        .format_timestamp(None)
+        .init();
     let cli = Cli::parse();
     let source = &cli.source;
     match cli.subcommand {
         Subcommand::Export(ExportArgs { platform }) => {
             export(platform.as_deref(), source.as_deref())
         }
-        Subcommand::Up => chnroutes::exec::up(&Default::default())?,
+        Subcommand::Up => chnroutes::up(&Default::default())?,
         Subcommand::Down => {
-            chnroutes::exec::down(&Default::default())?;
+            chnroutes::down(&Default::default())?;
         }
     }
     Ok(())

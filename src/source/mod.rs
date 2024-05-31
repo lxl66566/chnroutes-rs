@@ -1,7 +1,7 @@
 #[cfg(test)]
 use std::str::FromStr;
 
-use ipnet::Ipv4Net;
+use ipnet::IpNet;
 
 pub mod apnic;
 
@@ -18,18 +18,18 @@ pub enum Source {
 }
 
 impl Source {
-    pub fn get_cn_ips(&self) -> crate::error::Result<Vec<Ipv4Net>> {
+    pub fn get_cn_ips(&self) -> crate::error::Result<Vec<IpNet>> {
         get_cn_ips(self)
     }
 }
 
-pub fn get_cn_ips(source: &Source) -> crate::error::Result<Vec<Ipv4Net>> {
+pub fn get_cn_ips(source: &Source) -> crate::error::Result<Vec<IpNet>> {
     match source {
         Source::apnic => apnic::fetch_ip_data(),
         #[cfg(test)]
         Source::test => Ok(vec![
-            Ipv4Net::from_str("1.0.1.0/24").unwrap(),
-            Ipv4Net::from_str("1.0.2.0/23").unwrap(),
+            IpNet::from_str("1.0.1.0/24").unwrap(),
+            IpNet::from_str("1.0.2.0/23").unwrap(),
         ]),
     }
 }

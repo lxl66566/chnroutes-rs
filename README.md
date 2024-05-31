@@ -1,10 +1,11 @@
 # chnroutes-rs
 
-WIP.
-
 简体中文 | [English](./README_en.md)
 
-[chnroutes](https://github.com/fivesheep/chnroutes) 的 rust 版本。
+[chnroutes](https://github.com/fivesheep/chnroutes) 的 Rewrite it in Rust 版本。
+
+- 本地缓存路由信息，每 7 天更新
+- 调用 API，快速（windows 1w 条写入仅需 30ms）
 
 ## 安装
 
@@ -34,23 +35,28 @@ WIP.
 ### 命令行
 
 ```sh
-chnroutes export -p windows         # 与原版 chnroutes 功能相同
-chnroutes up                        # 写入路由表
-chnroutes down                      # 移除路由表
+chnroutes export -p windows         # 导出路由表操作脚本，与原版 chnroutes.py 功能几乎一致（不推荐使用）
+chnroutes up                        # 写入路由表项
+chnroutes down                      # 移除路由表项
 ```
+
+由于在 `up` 和 `down` 时直接调用系统 API，速度非常快，建议直接使用此方式，而不是原版的导出脚本执行。
 
 ### 库
 
-```rs
-use chnroutes::{Result, Source, Target};
-fn main() -> Result<()> {
-    let cn_ip_results: Vec<ipnet::Ipv4Net> = chnroutes::source::apnic::fetch_ip_data()?;
-    let user_script: Result<(String, Option<String>)> = Target::Linux.export_str(&Source::apnic);
-    Ok(())
-}
+查看 [examples](./examples)
+
+## 开发
+
+```sh
+rustup install nightly-2024-04-29
+rustup override set nightly-2024-04-29
+cargo build --release --bin chnroutes --features=build-binary
 ```
 
-## 特性
+## TODO
 
-- 缓存路由信息，每 7 天更新
-- 可换源（目前仅支持原版 APNIC，日后可添加更多）
+- 换源（目前仅支持原版 APNIC，日后可添加更多）
+  - https://github.com/misakaio/chnroutes2
+  - https://github.com/Loyalsoldier/geoip
+  - https://github.com/oschwald/maxminddb-rust

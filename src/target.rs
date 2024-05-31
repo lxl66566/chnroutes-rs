@@ -1,6 +1,6 @@
 use std::{path::PathBuf, str::FromStr};
 
-use ipnet::Ipv4Net;
+use ipnet::IpNet;
 
 use crate::{source::Source, Error, Result};
 
@@ -9,7 +9,7 @@ pub enum Target {
     OpenVPN(u32),
     Linux,
     Mac,
-    Windows(u32),
+    Windows,
     Android,
 }
 
@@ -26,7 +26,7 @@ impl Target {
             Self::OpenVPN(metric) => Ok((export_openvpn(source_ips, metric), None)),
             Self::Linux => Ok(export_linux(source_ips)),
             Self::Mac => Ok(export_mac(source_ips)),
-            Self::Windows(metric) => Ok(export_windows(source_ips, metric)),
+            Self::Windows => Ok(export_windows(source_ips)),
             Self::Android => Ok(export_android(source_ips)),
         }
     }
@@ -40,7 +40,7 @@ impl Target {
                 let mut up_filename = PathBuf::from("up");
                 let mut down_filename = PathBuf::from("down");
                 let extension = match other {
-                    Self::Windows(_) => "bat",
+                    Self::Windows => "bat",
                     _ => "sh",
                 };
                 up_filename.set_extension(extension);
@@ -63,14 +63,14 @@ impl FromStr for Target {
             "openvpn" => Ok(Self::OpenVPN(1)),
             "linux" => Ok(Self::Linux),
             "mac" => Ok(Self::Mac),
-            "windows" => Ok(Self::Windows(1)),
+            "windows" => Ok(Self::Windows),
             "android" => Ok(Self::Android),
             _ => Err(Error::InvalidTarget),
         }
     }
 }
 
-fn export_openvpn(ips: Vec<Ipv4Net>, metric: &u32) -> String {
+fn export_openvpn(ips: Vec<IpNet>, metric: &u32) -> String {
     ips.into_iter()
         .map(|ip| {
             format!(
@@ -84,7 +84,7 @@ fn export_openvpn(ips: Vec<Ipv4Net>, metric: &u32) -> String {
         .join("\n")
 }
 
-fn export_linux(ips: Vec<Ipv4Net>) -> (String, Option<String>) {
+fn export_linux(ips: Vec<IpNet>) -> (String, Option<String>) {
     let mut up = r#"#!/bin/bash
 export PATH="/bin:/sbin:/usr/sbin:/usr/bin"
 
@@ -131,7 +131,7 @@ OLDGW=`cat /tmp/vpn_oldgw`
     (up, Some(down))
 }
 
-fn export_mac(ips: Vec<Ipv4Net>) -> (String, Option<String>) {
+fn export_mac(ips: Vec<IpNet>) -> (String, Option<String>) {
     let mut up = r#"export PATH="/bin:/sbin:/usr/sbin:/usr/bin"
     
 OLDGW=`netstat -nr | grep '^default' | grep -v 'ppp' | sed 's/default *\([0-9\.]*\) .*/\1/' | awk '{if($1){print $1}}'`
@@ -181,7 +181,7 @@ route delete 192.168.0.0/16 "${OLDGW}"
     (up, Some(down))
 }
 
-fn export_windows(ips: Vec<Ipv4Net>, metric: &u32) -> (String, Option<String>) {
+fn export_windows(ips: Vec<IpNet>) -> (String, Option<String>) {
     let mut up = r#"@echo off
 for /F "tokens=3" %%* in ('route print ^| findstr "\<0.0.0.0\>"') do set "gw=%%*"
 echo gw=%gw%
@@ -198,11 +198,10 @@ ipconfig /flushdns
         ips.iter()
             .map(|ip| {
                 format!(
-                    r#"route add {} mask {} {} metric {}"#,
+                    r#"route add {} mask {} {} metric 1"#,
                     ip.addr(),
                     ip.netmask(),
                     "%gw%",
-                    metric
                 )
             })
             .collect::<Vec<String>>()
@@ -219,7 +218,7 @@ ipconfig /flushdns
     (up, Some(down))
 }
 
-fn export_android(ips: Vec<Ipv4Net>) -> (String, Option<String>) {
+fn export_android(ips: Vec<IpNet>) -> (String, Option<String>) {
     let mut up = r#"#!/bin/sh
 alias nestat='/system/xbin/busybox netstat'
 alias grep='/system/xbin/busybox grep'
@@ -267,7 +266,7 @@ mod tests {
 
     #[test]
     fn test_export_file() {
-        Target::Windows(123).export_file(&Source::test).unwrap();
+        Target::Windows.export_file(&Source::test).unwrap();
         let up = Path::new("up.bat");
         let down = Path::new("down.bat");
         assert!(up.exists() && down.exists());
