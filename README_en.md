@@ -60,3 +60,4 @@ cargo build --release --bin chnroutes --features=build-binary
   - https://github.com/misakaio/chnroutes2
   - https://github.com/Loyalsoldier/geoip
   - https://github.com/oschwald/maxminddb-rust
+- other region support
