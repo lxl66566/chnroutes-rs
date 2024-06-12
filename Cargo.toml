@@ -16,10 +16,9 @@ ipnet = "2.9.0"
 thiserror = "1.0.61"
 enum-tools = "0.5.3"
 net-route = "0.4.3"
-pollster = "0.3.0"
 tokio = { version = "1.38.0", features = ["rt", "macros", "rt-multi-thread"] }
 futures-util = "0.3.30"
-netdev = "0.27.0"
+netdev = "0.28.0"
 log = "0.4.21"
 tap = "1.0.1"
 # openssl = { version = "0.10.64", features = ["vendored"] }

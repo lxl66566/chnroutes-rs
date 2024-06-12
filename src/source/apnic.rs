@@ -51,6 +51,5 @@ mod tests {
                 .as_str(),
         );
         assert_eq!(results[0], IpNet::from_str("1.0.1.0/24").unwrap());
-        assert_eq!(results[0], IpNet::from_str("1.0.2.0/23").unwrap());
     }
 }

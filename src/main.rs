@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use clap::Parser;
 use colored::Colorize;
+use env_logger::Env;
 
 #[derive(Parser, Clone, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -32,9 +33,9 @@ pub struct ExportArgs {
 }
 
 // TODO: deal with source
-fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info"))
         .format_target(false)
         .format_timestamp(None)
         .init();
@@ -44,9 +45,9 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Subcommand::Export(ExportArgs { platform }) => {
             export(platform.as_deref(), source.as_deref())
         }
-        Subcommand::Up => chnroutes::up(&Default::default())?,
+        Subcommand::Up => chnroutes::up(&Default::default()).await?,
         Subcommand::Down => {
-            chnroutes::down(&Default::default())?;
+            chnroutes::down(&Default::default()).await?;
         }
     }
     Ok(())
