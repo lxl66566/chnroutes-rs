@@ -40,7 +40,7 @@ chnroutes up                        # Write routing table items.
 chnroutes down                      # Remove routing table items.
 ```
 
-Since the system API is called directly during `up` and `down` and is very fast, it is recommended to use this method directly instead of the original export script execution.
+Since the system API is called directly during `up` and `down` and is very fast, it is recommended to use this method directly instead of the original export script execution. It needs Administrator/root permission.
 
 ### Lib
 

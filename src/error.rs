@@ -40,6 +40,10 @@ pub enum RouteOpError {
     FutureError(#[from] tokio::task::JoinError),
     #[error("Get default interface error: {0}")]
     GetInterfaceError(String),
+    #[error("Route Already exists")]
+    RouteAlreadyExistsError,
+    #[error("Route Not found")]
+    RouteNotFoundError,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

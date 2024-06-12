@@ -1,4 +1,5 @@
 use std::{
+    any::Any,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     sync::OnceLock,
 };
@@ -6,7 +7,6 @@ use std::{
 use futures_util::{stream::FuturesOrdered, TryStreamExt};
 use ipnet::IpNet;
 use net_route::{Handle, Route};
-use tap::Tap;
 use tokio::sync::OnceCell;
 
 use crate::error::RouteOpError;
@@ -40,10 +40,11 @@ pub async fn get_gateway(handle: &Handle) -> Result<(Option<Ipv4Addr>, Option<Ip
     Ok((v4, v6))
 }
 
-/// Add ont route entry to routing table.
+/// Add one route entry to routing table.
 pub async fn add_route(handle: &Handle, route: &IpNet) -> Result<()> {
     let gateway = GATEWAY.get_or_try_init(|| get_gateway(handle)).await?;
     let route_item = &Route::new(route.addr(), route.prefix_len())
+        // deal with ipv4 and ipv6
         .with_gateway(if route.addr().is_ipv4() {
             IpAddr::from(gateway.0.ok_or(RouteOpError::NoGatewayError)?)
         } else {
@@ -68,21 +69,39 @@ pub async fn add_route(handle: &Handle, route: &IpNet) -> Result<()> {
                 .get_or_try_init(|| get_default_interface().map(|x| x.index))
                 .map_err(RouteOpError::GetInterfaceError)?,
         );
-    handle.add(route_item).await?;
+
+    // deal with RouteAlreadyExistsError
+    let result = handle.add(route_item).await;
+    if let Err(err) = result {
+        // Received a netlink error message File exists (os error 17)
+        // We cannot use other way to deal with this error because net-route crate turns
+        // it into std::io::Error with no more information.
+        if err.kind() == std::io::ErrorKind::Other && err.to_string().contains("exists") {
+            return Err(RouteOpError::RouteAlreadyExistsError);
+        } else {
+            return Err(err.into());
+        }
+    }
     Ok(())
 }
 
 /// Delete route entry from routing table.
 pub async fn del_route(handle: &Handle, route: &IpNet) -> Result<()> {
-    handle
-        .delete(
-            &Route::new(route.addr(), route.prefix_len()).with_ifindex(
-                *INTERFACE_INDEX
-                    .get_or_try_init(|| get_default_interface().map(|x| x.index))
-                    .map_err(RouteOpError::GetInterfaceError)?,
-            ),
-        )
-        .await?;
+    let route_item = &Route::new(route.addr(), route.prefix_len()).with_ifindex(
+        *INTERFACE_INDEX
+            .get_or_try_init(|| get_default_interface().map(|x| x.index))
+            .map_err(RouteOpError::GetInterfaceError)?,
+    );
+    let result = handle.delete(route_item).await;
+
+    // deal with RouteNotFoundError
+    if let Err(err) = result {
+        if err.kind() == std::io::ErrorKind::NotFound {
+            return Err(RouteOpError::RouteNotFoundError);
+        } else {
+            return Err(err.into());
+        }
+    }
     Ok(())
 }
 
@@ -96,21 +115,26 @@ pub async fn add_routes(routes: &[IpNet]) -> Result<()> {
         .iter()
         .map(|r| add_route(handle, r))
         .collect::<FuturesOrdered<_>>();
-    let mut num = 1;
-    while (futures.try_next().await.tap(|res| {
-        if res.is_err() {
-            error!(
-                "Add {} th route error: {:?}",
-                num,
-                res.as_ref().unwrap_err()
-            );
+    let mut index = 1;
+    let mut ignored = 0;
+    loop {
+        match futures.try_next().await {
+            Ok(Some(_)) => {
+                index += 1;
+            }
+            Ok(None) => {
+                break;
+            }
+            Err(RouteOpError::RouteAlreadyExistsError) => {
+                ignored += 1;
+            }
+            Err(err) => {
+                error!("Error while adding {} th route: {:?}", index, err);
+                return Err(err);
+            }
         }
-    })?)
-    .is_some()
-    {
-        num += 1;
     }
-    info!("Add success.");
+    info!("Routes added success, ignored: {}.", ignored);
     Ok(())
 }
 
@@ -122,21 +146,26 @@ pub async fn del_routes(routes: &[IpNet]) -> Result<()> {
         .iter()
         .map(|r| del_route(&handle, r))
         .collect::<FuturesOrdered<_>>();
-    let mut num = 1;
-    while (futures.try_next().await.tap(|res| {
-        if res.is_err() {
-            error!(
-                "Delete {} th route error: {:?}",
-                num,
-                res.as_ref().unwrap_err()
-            );
+    let mut index = 1;
+    let mut ignored = 0;
+    loop {
+        match futures.try_next().await {
+            Ok(Some(_)) => {
+                index += 1;
+            }
+            Ok(None) => {
+                break;
+            }
+            Err(RouteOpError::RouteNotFoundError) => {
+                ignored += 1;
+            }
+            Err(err) => {
+                error!("Error while removing {} th route: {:?}", index, err);
+                return Err(err);
+            }
         }
-    })?)
-    .is_some()
-    {
-        num += 1;
     }
-    info!("Remove success.");
+    info!("Routes removed success, ignored: {}.", ignored);
     Ok(())
 }
 
