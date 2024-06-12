@@ -1,43 +1,73 @@
-use std::{net::IpAddr, sync::OnceLock};
+use std::{
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    sync::OnceLock,
+};
 
-use futures_util::{stream::FuturesUnordered, TryStreamExt};
+use futures_util::{stream::FuturesOrdered, TryStreamExt};
 use ipnet::IpNet;
 use net_route::{Handle, Route};
 use tap::Tap;
 use tokio::sync::OnceCell;
 
 use crate::error::RouteOpError;
-pub static GATEWAY: OnceCell<IpAddr> = OnceCell::const_new();
+pub static GATEWAY: OnceCell<(Option<Ipv4Addr>, Option<Ipv6Addr>)> = OnceCell::const_new();
 pub static INTERFACE_INDEX: OnceLock<u32> = OnceLock::new();
 use log::{error, info};
 use netdev::get_default_interface;
 
 type Result<T> = std::result::Result<T, RouteOpError>;
 
-/// Get default gateway ip.
-pub async fn get_gateway(handle: &Handle) -> Result<IpAddr> {
-    let routes = handle.list().await?;
-    Ok(routes
+/// Get default gateway ipv4 and ipv6.
+pub async fn get_gateway(handle: &Handle) -> Result<(Option<Ipv4Addr>, Option<Ipv6Addr>)> {
+    let (mut v4, mut v6) = (None, None);
+    let routes = handle
+        .list()
+        .await?
         .into_iter()
         .filter(|r| r.gateway.is_some())
-        .find(|r| r.destination.is_unspecified())
-        .ok_or(RouteOpError::NoGatewayError)?
-        .gateway
-        .unwrap())
+        .filter(|r| r.destination.is_unspecified())
+        .filter_map(|r| r.gateway);
+    for ip in routes {
+        match ip {
+            IpAddr::V4(ipv4) if v4.is_none() => v4 = Some(ipv4),
+            IpAddr::V6(ipv6) if v6.is_none() => v6 = Some(ipv6),
+            _ => {}
+        }
+        if v4.is_some() && v6.is_some() {
+            return Ok((v4, v6));
+        }
+    }
+    Ok((v4, v6))
 }
 
 /// Add ont route entry to routing table.
 pub async fn add_route(handle: &Handle, route: &IpNet) -> Result<()> {
+    let gateway = GATEWAY.get_or_try_init(|| get_gateway(handle)).await?;
     let route_item = &Route::new(route.addr(), route.prefix_len())
-        .with_gateway(*GATEWAY.get_or_try_init(|| get_gateway(handle)).await?)
+        .with_gateway(if route.addr().is_ipv4() {
+            IpAddr::from(gateway.0.ok_or(RouteOpError::NoGatewayError)?)
+        } else {
+            #[cfg(not(windows))]
+            {
+                IpAddr::from(gateway.1.ok_or(RouteOpError::NoGatewayError)?)
+            }
+            #[cfg(windows)]
+            {
+                // on windows, gateway can be ipv4 while destination is ipv6
+                if let Some(g) = gateway.1 {
+                    IpAddr::from(g)
+                } else if let Some(g) = gateway.0 {
+                    IpAddr::from(g)
+                } else {
+                    return Err(RouteOpError::NoGatewayError);
+                }
+            }
+        })
         .with_ifindex(
             *INTERFACE_INDEX
                 .get_or_try_init(|| get_default_interface().map(|x| x.index))
                 .map_err(RouteOpError::GetInterfaceError)?,
         );
-    // Route { destination: 223.223.192.0, prefix: 20, gateway: Some(192.168.1.1),
-    // ifindex: Some(2), table: 254, source: None, source_prefix: 0, source_hint:
-    // None, metric: None }
     handle.add(route_item).await?;
     Ok(())
 }
@@ -65,7 +95,7 @@ pub async fn add_routes(routes: &[IpNet]) -> Result<()> {
     let mut futures = routes
         .iter()
         .map(|r| add_route(handle, r))
-        .collect::<FuturesUnordered<_>>();
+        .collect::<FuturesOrdered<_>>();
     let mut num = 1;
     while (futures.try_next().await.tap(|res| {
         if res.is_err() {
@@ -91,7 +121,7 @@ pub async fn del_routes(routes: &[IpNet]) -> Result<()> {
     let mut futures = routes
         .iter()
         .map(|r| del_route(&handle, r))
-        .collect::<FuturesUnordered<_>>();
+        .collect::<FuturesOrdered<_>>();
     let mut num = 1;
     while (futures.try_next().await.tap(|res| {
         if res.is_err() {
@@ -119,7 +149,9 @@ mod tests {
         let handle = Handle::new().unwrap();
         let result = get_gateway(&handle).await;
         assert!(result.is_ok());
-        dbg!(result.unwrap());
+        let result = result.unwrap();
+        assert!(result.0.is_some() || result.1.is_some());
+        dbg!(result);
     }
 
     async fn test_add_remove_route(dest: IpAddr) {
