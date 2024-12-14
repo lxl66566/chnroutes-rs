@@ -1,52 +1,52 @@
 [package]
-name = "chnroutes"
-version = "0.1.0"
-edition = "2021"
-authors = ["lxl66566 <lxl66566@gmail.com>"]
+authors     = ["lxl66566 <lxl66566@gmail.com>"]
+categories  = ["network-programming"]
 description = "Rust version of chnroutes (with more features), to bypass the VPN accessing CN IPs."
-homepage = "https://github.com/lxl66566/chnroutes-rs"
-repository = "https://github.com/lxl66566/chnroutes-rs"
-license = "MIT"
-readme = "./README.md"
-categories = ["network-programming"]
-keywords = ["chnroutes", "VPN", "bypass", "route"]
+edition     = "2021"
+homepage    = "https://github.com/lxl66566/chnroutes-rs"
+keywords    = ["chnroutes", "VPN", "bypass", "route"]
+license     = "MIT"
+name        = "chnroutes"
+readme      = "./README.md"
+repository  = "https://github.com/lxl66566/chnroutes-rs"
+version     = "0.1.1"
 
 [dependencies]
-ipnet = "2.9.0"
-thiserror = "1.0.61"
-enum-tools = "0.5.3"
-net-route = "0.4.3"
-tokio = { version = "1.38.0", features = ["rt", "macros", "rt-multi-thread"] }
-futures-util = "0.3.30"
-netdev = "0.28.0"
-log = "0.4.21"
-
-clap = { version = "4.5.4", features = ["derive"], optional = true }
-colored = { version = "2.1.0", optional = true }
-env_logger = { version = "0.11.3", optional = true }
+clap              = { version = "4.5.23", features = ["derive"], optional = true }
+colored           = { version = "2.1.0", optional = true }
+enum-tools        = "0.5.3"
+futures-util      = "0.3.31"
+ipnet             = "2.9.0"
+log               = "0.4.22"
+net-route         = "0.4.5"
+netdev            = "0.31.0"
+once-fn           = "0.2.0"
+pretty_env_logger = { version = "0.5.0", optional = true }
+thiserror         = "2.0.7"
+tokio             = { version = "1.42.0", features = ["rt", "macros", "rt-multi-thread"] }
 
 [dependencies.reqwest]
-version = "0.12.4"
-features = ["blocking", "rustls-tls"]
 default-features = false
+features         = ["blocking", "rustls-tls"]
+version          = "0.12.9"
 
 [profile.release]
-strip = true
-lto = true
-panic = "abort"
+lto       = true
 opt-level = "z"
+panic     = "abort"
+strip     = true
 
 [features]
-build-binary = ["clap", "colored", "env_logger"]
+bin = ["clap", "colored", "pretty_env_logger"]
 
 [lib]
 name = "chnroutes"
 path = "src/lib.rs"
 
 [[bin]]
-name = "chnroutes"
-path = "src/main.rs"
-required-features = ["build-binary"]
+name              = "chnroutes"
+path              = "src/main.rs"
+required-features = ["bin"]
 
 [[example]]
 name = "basic"

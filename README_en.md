@@ -14,16 +14,16 @@ There are several different ways to install chnroutes, you can choose **any of t
 - Download the file from [Releases](https://github.com/lxl66566/chnroutes-rs/releases), unzip it, and put it in `C:\Windows\System32` (if you are using windows) or any `Path` directory.
 - Using [bpm](https://github.com/lxl66566/bpm):
   ```sh
-  bpm i chnroutes-rs -b chnroutes -q
+  bpm i https://github.com/lxl66566/chnroutes-rs -b chnroutes
   ```
 - Using [scoop](https://scoop.sh/):
   ```sh
   scoop bucket add absx https://github.com/absxsfriends/scoop-bucket
   scoop install chnroutes-rs
   ```
-- Using cargo:
+- Using cargo (compile from source code):
   ```sh
-  cargo +nightly install chnroutes
+  cargo install chnroutes --features bin
   ```
   or [cargo-binstall](https://github.com/cargo-bins/cargo-binstall):
   ```sh
@@ -46,18 +46,10 @@ Since the system API is called directly during `up` and `down` and is very fast,
 
 View [examples](./examples)
 
-## Development
-
-```sh
-rustup install nightly-2024-04-29
-rustup override set nightly-2024-04-29
-cargo build --release --bin chnroutes --features=build-binary
-```
-
 ## TODO
 
-- Source selection (only the original APNIC source is supported at the moment, more sources could be added later)
+- [ ] Source selection (only the original APNIC source is supported at the moment, more sources could be added later)
   - https://github.com/misakaio/chnroutes2
   - https://github.com/Loyalsoldier/geoip
   - https://github.com/oschwald/maxminddb-rust
-- other region support
+- [ ] other region support

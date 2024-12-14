@@ -2,7 +2,25 @@ use std::str::FromStr;
 
 use clap::Parser;
 use colored::Colorize;
-use env_logger::Env;
+use log::LevelFilter;
+
+#[inline]
+pub fn log_init() {
+    #[cfg(not(debug_assertions))]
+    log_init_with_default_level(LevelFilter::Info);
+    #[cfg(debug_assertions)]
+    log_init_with_default_level(LevelFilter::Debug);
+}
+
+#[inline]
+pub fn log_init_with_default_level(level: LevelFilter) {
+    _ = pretty_env_logger::formatted_builder()
+        .filter_level(level)
+        .format_timestamp_secs()
+        .filter_module("reqwest", LevelFilter::Info)
+        .parse_default_env()
+        .try_init();
+}
 
 #[derive(Parser, Clone, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -35,10 +53,7 @@ pub struct ExportArgs {
 // TODO: deal with source
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    env_logger::Builder::from_env(Env::default().default_filter_or("info"))
-        .format_target(false)
-        .format_timestamp(None)
-        .init();
+    log_init();
     let cli = Cli::parse();
     let source = &cli.source;
     match cli.subcommand {
@@ -53,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     Ok(())
 }
 
-pub fn export(platform: Option<&str>, source: Option<&str>) {
+pub fn export(platform: Option<&str>, _source: Option<&str>) {
     let target = chnroutes::Target::from_str(platform.unwrap_or_default());
     if let Ok(target) = target {
         target.export_file(&Default::default()).unwrap();

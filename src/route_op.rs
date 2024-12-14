@@ -1,5 +1,4 @@
 use std::{
-    any::Any,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     sync::OnceLock,
 };
@@ -14,8 +13,14 @@ pub static GATEWAY: OnceCell<(Option<Ipv4Addr>, Option<Ipv6Addr>)> = OnceCell::c
 pub static INTERFACE_INDEX: OnceLock<u32> = OnceLock::new();
 use log::{error, info};
 use netdev::get_default_interface;
+use once_fn::once;
 
 type Result<T> = std::result::Result<T, RouteOpError>;
+
+#[once]
+fn get_interface_index() -> std::result::Result<u32, String> {
+    get_default_interface().map(|x| x.index)
+}
 
 /// Get default gateway ipv4 and ipv6.
 pub async fn get_gateway(handle: &Handle) -> Result<(Option<Ipv4Addr>, Option<Ipv6Addr>)> {
@@ -64,11 +69,7 @@ pub async fn add_route(handle: &Handle, route: &IpNet) -> Result<()> {
                 }
             }
         })
-        .with_ifindex(
-            *INTERFACE_INDEX
-                .get_or_try_init(|| get_default_interface().map(|x| x.index))
-                .map_err(RouteOpError::GetInterfaceError)?,
-        );
+        .with_ifindex(get_interface_index().map_err(RouteOpError::GetInterfaceError)?);
 
     // deal with RouteAlreadyExistsError
     let result = handle.add(route_item).await;
@@ -87,11 +88,8 @@ pub async fn add_route(handle: &Handle, route: &IpNet) -> Result<()> {
 
 /// Delete route entry from routing table.
 pub async fn del_route(handle: &Handle, route: &IpNet) -> Result<()> {
-    let route_item = &Route::new(route.addr(), route.prefix_len()).with_ifindex(
-        *INTERFACE_INDEX
-            .get_or_try_init(|| get_default_interface().map(|x| x.index))
-            .map_err(RouteOpError::GetInterfaceError)?,
-    );
+    let route_item = &Route::new(route.addr(), route.prefix_len())
+        .with_ifindex(get_interface_index().map_err(RouteOpError::GetInterfaceError)?);
     let result = handle.delete(route_item).await;
 
     // deal with RouteNotFoundError

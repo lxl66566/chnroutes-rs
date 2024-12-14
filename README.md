@@ -14,16 +14,16 @@
 - 在 [Releases](https://github.com/lxl66566/chnroutes-rs/releases) 中下载文件并解压，放入 `C:\Windows\System32`（如果您用的是 windows）或任意 `Path` 目录下。
 - 使用 [bpm](https://github.com/lxl66566/bpm)：
   ```sh
-  bpm i chnroutes-rs -b chnroutes -q
+  bpm i https://github.com/lxl66566/chnroutes-rs -b chnroutes
   ```
 - 使用 [scoop](https://scoop.sh/)：
   ```sh
   scoop bucket add absx https://github.com/absxsfriends/scoop-bucket
   scoop install chnroutes-rs
   ```
-- 使用 cargo：
+- 使用 cargo（从源码编译）：
   ```sh
-  cargo +nightly install chnroutes
+  cargo install chnroutes --features bin
   ```
   或 [cargo-binstall](https://github.com/cargo-bins/cargo-binstall)：
   ```sh
@@ -46,18 +46,10 @@ chnroutes down                      # 移除路由表项
 
 查看 [examples](./examples)
 
-## 开发
-
-```sh
-rustup install nightly-2024-04-29
-rustup override set nightly-2024-04-29
-cargo build --release --bin chnroutes --features=build-binary
-```
-
 ## TODO
 
-- 换源（目前仅支持原版 APNIC，日后可添加更多）
+- [ ] 换源（目前仅支持原版 APNIC，日后可添加更多）
   - https://github.com/misakaio/chnroutes2
   - https://github.com/Loyalsoldier/geoip
   - https://github.com/oschwald/maxminddb-rust
-- other region support
+- [ ] other region support
