@@ -1,7 +1,7 @@
-use std::{net::IpAddr, str::FromStr, time::Duration};
+use std::{io::Cursor, net::IpAddr, str::FromStr, time::Duration};
 
 use ipnet::IpNet;
-use log::info;
+use log::{info, warn};
 
 use crate::cache::Cache;
 
@@ -15,10 +15,28 @@ pub fn fetch_ip_data() -> crate::error::Result<Vec<IpNet>> {
         ));
     }
     info!("Fetching data from apnic.net ...");
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()?;
     let url = "https://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest";
-    let data = reqwest::blocking::get(url)?.text()?;
-    cache.save_str(&data)?;
-    Ok(parse_ip_data(&data))
+    let data = client.get(url).send().map(|r| r.text());
+    match data {
+        Ok(Ok(data)) => {
+            info!("Fetching data from apnic.net done");
+            cache.save_str(&data)?;
+            Ok(parse_ip_data(&data))
+        }
+        // If the data fetch failed, use the built-in data instead.
+        Ok(Err(e)) | Err(e) => {
+            warn!("Fetching data from apnic.net failed, use built-in apnic data: {e:?}");
+            let compressed_bytes = include_bytes!(concat!(env!("OUT_DIR"), "/apnic.zst"));
+            let de = zstd::stream::decode_all(Cursor::new(compressed_bytes)).unwrap();
+            cache.save(&de)?;
+            Ok(parse_ip_data(
+                &String::from_utf8(de).expect("The cache file should be valid UTF-8."),
+            ))
+        }
+    }
 }
 
 /// Parse IP data from str.
@@ -41,7 +59,20 @@ pub fn parse_ip_data(content: &str) -> Vec<IpNet> {
 
 #[cfg(test)]
 mod tests {
+    use log::LevelFilter;
+
     use super::*;
+
+    #[test]
+    fn test_fetch_ip_data() {
+        _ = pretty_env_logger::formatted_builder()
+            .filter_level(LevelFilter::Debug)
+            .format_timestamp_secs()
+            .filter_module("reqwest", LevelFilter::Info)
+            .parse_default_env()
+            .try_init();
+        assert!(fetch_ip_data().is_ok());
+    }
 
     #[test]
     fn test_parse_ip_data() {

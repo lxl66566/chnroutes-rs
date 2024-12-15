@@ -42,9 +42,9 @@ impl Cache {
         Ok(None)
     }
 
-    pub fn save_str<'a>(&self, bytes: &'a str) -> std::result::Result<&'a str, CacheError> {
-        self.save(bytes.as_bytes())?;
-        Ok(bytes)
+    pub fn save_str<'a>(&self, s: &'a str) -> std::result::Result<&'a str, CacheError> {
+        self.save(s.as_bytes())?;
+        Ok(s)
     }
 
     #[allow(unused)]
