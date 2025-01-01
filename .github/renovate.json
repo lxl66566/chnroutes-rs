@@ -1,0 +1,3 @@
+{
+  "extends": ["github>lxl66566/.github:renovate"]
+}
