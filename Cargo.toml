@@ -22,7 +22,7 @@ net-route         = "0.4.5"
 netdev            = "0.31.0"
 once-fn           = "0.2.0"
 pretty_env_logger = { version = "0.5.0", optional = true }
-thiserror         = "2.0.7"
+thiserror         = "2.0.9"
 tokio             = { version = "1.42.0", features = ["rt", "macros", "rt-multi-thread"] }
 zstd              = "0.13.2"
 
