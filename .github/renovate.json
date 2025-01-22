@@ -1,3 +1,4 @@
 {
-  "extends": ["github>lxl66566/.github:renovate"]
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:base", "github>lxl66566/.github:renovate"]
 }
