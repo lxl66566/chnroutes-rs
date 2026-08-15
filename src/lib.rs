@@ -9,9 +9,11 @@ pub use source::Source;
 pub use target::Target;
 
 pub async fn up(source: &Source) -> Result<()> {
-    Ok(route_op::add_routes(&source.get_cn_ips()?).await?)
+    route_op::add_routes(&source.get_cn_ips().await?).await?;
+    Ok(())
 }
 
 pub async fn down(source: &Source) -> Result<()> {
-    Ok(route_op::del_routes(&source.get_cn_ips()?).await?)
+    route_op::del_routes(&source.get_cn_ips().await?).await?;
+    Ok(())
 }

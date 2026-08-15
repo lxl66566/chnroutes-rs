@@ -21,8 +21,8 @@ impl Target {
     ///
     /// OpenVPN => Append the content to openvpn config file.
     /// Others => Return two Strings representing the upscript and downscript.
-    pub fn export_str(&self, source: &Source) -> Result<(String, Option<String>)> {
-        let source_ips = source.get_cn_ips()?;
+    pub async fn export_str(&self, source: &Source) -> Result<(String, Option<String>)> {
+        let source_ips = source.get_cn_ips().await?;
         match self {
             Self::OpenVPN(metric) => Ok((export_openvpn(source_ips, *metric), None)),
             Self::Linux => Ok(export_linux(&source_ips)),
@@ -33,8 +33,8 @@ impl Target {
     }
 
     /// write the export script as file to current dir.
-    pub fn export_file(&self, source: &Source) -> Result<()> {
-        let (up, down) = self.export_str(source)?;
+    pub async fn export_file(&self, source: &Source) -> Result<()> {
+        let (up, down) = self.export_str(source).await?;
         match self {
             Self::OpenVPN(_) => std::fs::write("openvpn_conf.txt", up)?,
             other => {
@@ -266,9 +266,9 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn test_export_file() {
-        Target::Windows.export_file(&Source::test).unwrap();
+    #[tokio::test]
+    async fn test_export_file() {
+        Target::Windows.export_file(&Source::test).await.unwrap();
         let up = Path::new("up.bat");
         let down = Path::new("down.bat");
         assert!(up.exists() && down.exists());

@@ -6,29 +6,21 @@ use log::{info, warn};
 use crate::{cache::Cache, error::CacheError};
 
 /// Fetch IP data from apnic.net, add it to cache and return the parsed data
-pub fn fetch_ip_data() -> crate::error::Result<Vec<IpNet>> {
+pub async fn fetch_ip_data() -> crate::error::Result<Vec<IpNet>> {
     let cache = Cache::new("apnic", Duration::from_secs(7 * 24 * 60 * 60));
     if let Some(data) = load_cache(&cache)? {
         info!("Loading data from cache ...");
         return Ok(parse_ip_data(&data));
     }
     info!("Fetching data from apnic.net ...");
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .build()?;
-    let url = "https://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest";
-    let data = client
-        .get(url)
-        .send()
-        .map(reqwest::blocking::Response::text);
-    match data {
-        Ok(Ok(data)) => {
+    match fetch_remote_data().await {
+        Ok(data) => {
             info!("Fetching data from apnic.net done");
             cache.save_str(&data)?;
             Ok(parse_ip_data(&data))
         },
         // If the data fetch failed, use the built-in data instead.
-        Ok(Err(e)) | Err(e) => {
+        Err(e) => {
             warn!("Fetching data from apnic.net failed, use built-in apnic data: {e:?}");
             let compressed_bytes = include_bytes!(concat!(env!("OUT_DIR"), "/apnic.zst"));
             let de = zstd::stream::decode_all(Cursor::new(compressed_bytes))?;
@@ -38,6 +30,18 @@ pub fn fetch_ip_data() -> crate::error::Result<Vec<IpNet>> {
             ))
         },
     }
+}
+
+async fn fetch_remote_data() -> reqwest::Result<String> {
+    let url = "https://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest";
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()?
+        .get(url)
+        .send()
+        .await?
+        .text()
+        .await
 }
 
 /// Load the cached source file, treating a corrupted (non UTF-8) cache as a miss.
@@ -106,19 +110,12 @@ fn parse_cn_record(fields: &[&str]) -> Result<IpNet, String> {
 
 #[cfg(test)]
 mod tests {
-    use log::LevelFilter;
-
     use super::*;
 
-    #[test]
-    fn test_fetch_ip_data() {
-        _ = pretty_env_logger::formatted_builder()
-            .filter_level(LevelFilter::Debug)
-            .format_timestamp_secs()
-            .filter_module("reqwest", LevelFilter::Info)
-            .parse_default_env()
-            .try_init();
-        assert!(fetch_ip_data().is_ok());
+    #[tokio::test]
+    #[ignore = "requires network access"]
+    async fn test_fetch_ip_data() {
+        assert!(fetch_ip_data().await.is_ok());
     }
 
     #[test]

@@ -18,18 +18,14 @@ pub enum Source {
 }
 
 impl Source {
-    pub fn get_cn_ips(&self) -> crate::error::Result<Vec<IpNet>> {
-        get_cn_ips(self)
-    }
-}
-
-pub fn get_cn_ips(source: &Source) -> crate::error::Result<Vec<IpNet>> {
-    match source {
-        Source::apnic => apnic::fetch_ip_data(),
-        #[cfg(test)]
-        Source::test => Ok(vec![
-            IpNet::from_str("1.0.1.0/24").unwrap(),
-            IpNet::from_str("1.0.2.0/23").unwrap(),
-        ]),
+    pub async fn get_cn_ips(&self) -> crate::error::Result<Vec<IpNet>> {
+        match self {
+            Source::apnic => apnic::fetch_ip_data().await,
+            #[cfg(test)]
+            Source::test => Ok(vec![
+                IpNet::from_str("1.0.1.0/24").unwrap(),
+                IpNet::from_str("1.0.2.0/23").unwrap(),
+            ]),
+        }
     }
 }

@@ -229,7 +229,7 @@ dependencies = [
 
 [[package]]
 name = "chnroutes"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "clap",
  "colored",
@@ -1540,9 +1540,7 @@ dependencies = [
  "base64",
  "bytes",
  "encoding_rs",
- "futures-channel",
  "futures-core",
- "futures-util",
  "h2",
  "http",
  "http-body",

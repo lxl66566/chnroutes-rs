@@ -59,7 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let source = &cli.source;
     match cli.subcommand {
         Subcommand::Export(ExportArgs { platform }) => {
-            export(platform.as_deref(), source.as_deref());
+            export(platform.as_deref(), source.as_deref()).await;
         },
         Subcommand::Up => chnroutes::up(&Source::default()).await?,
         Subcommand::Down => {
@@ -69,10 +69,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     Ok(())
 }
 
-pub fn export(platform: Option<&str>, _source: Option<&str>) {
+pub async fn export(platform: Option<&str>, _source: Option<&str>) {
     let target = chnroutes::Target::from_str(platform.unwrap_or_default());
     if let Ok(target) = target {
-        target.export_file(&Source::default()).unwrap();
+        target.export_file(&Source::default()).await.unwrap();
     } else {
         eprint!("Unknown platform. platform must in ");
         for x in ["windows", "mac", "linux", "android", "openvpn"] {
