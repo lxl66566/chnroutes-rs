@@ -1,48 +1,15 @@
 [package]
-authors     = ["lxl66566 <lxl66566@gmail.com>"]
-categories  = ["network-programming"]
-description = "Rust version of chnroutes (with more features), to bypass the VPN accessing CN IPs."
-edition     = "2021"
-homepage    = "https://github.com/lxl66566/chnroutes-rs"
-keywords    = ["chnroutes", "VPN", "bypass", "route"]
-license     = "MIT"
-name        = "chnroutes"
-readme      = "./README.md"
-repository  = "https://github.com/lxl66566/chnroutes-rs"
-version     = "0.1.3"
-
-[dependencies]
-clap              = { version = "4.5.23", features = ["derive"], optional = true }
-colored           = { version = "2.1.0", optional = true }
-enum-tools        = "0.5.3"
-futures-util      = "0.3.31"
-ipnet             = "2.9.0"
-log               = "0.4.22"
-net-route         = "0.4.5"
-netdev            = "0.31.0"
-once-fn           = "0.2.0"
-pretty_env_logger = { version = "0.5.0", optional = true }
-thiserror         = "2.0.7"
-tokio             = { version = "1.42.0", features = ["rt", "macros", "rt-multi-thread"] }
-zstd              = "0.13.2"
-
-[dependencies.reqwest]
-default-features = false
-features         = ["blocking", "rustls-tls"]
-version          = "0.12.9"
-
-
-[profile.release]
-lto       = true
-opt-level = "z"
-panic     = "abort"
-strip     = true
-
-[build-dependencies]
-zstd = "0.13.2"
-
-[features]
-bin = ["clap", "colored", "pretty_env_logger"]
+name         = "chnroutes"
+version      = "0.1.3"
+edition      = "2024"
+rust-version = "1.85.0"
+description  = "Rust version of chnroutes (with more features), to bypass the VPN accessing CN IPs."
+readme       = "./README.md"
+homepage     = "https://github.com/lxl66566/chnroutes-rs"
+repository   = "https://github.com/lxl66566/chnroutes-rs"
+license      = "MIT"
+keywords     = ["VPN", "bypass", "chnroutes", "route"]
+categories   = ["network-programming"]
 
 [lib]
 name = "chnroutes"
@@ -56,3 +23,50 @@ required-features = ["bin"]
 [[example]]
 name = "basic"
 path = "examples/basic.rs"
+
+[dependencies]
+clap              = { version = "4.5.23", features = ["derive"], optional = true }
+colored           = { version = "2.1.0", optional = true }
+enum-tools        = "0.5.3"
+futures-util      = "0.3.31"
+ipnet             = "2.9.0"
+log               = "0.4.22"
+net-route         = "0.4.5"
+netdev            = "0.31.0"
+once-fn           = "0.2.0"
+pretty_env_logger = { version = "0.5.0", optional = true }
+thiserror         = "2.0.7"
+tokio             = { version = "1.42.0", features = ["macros", "rt", "rt-multi-thread"] }
+zstd              = "0.13.2"
+
+[dependencies.reqwest]
+version          = "0.12.9"
+default-features = false
+features         = ["blocking", "rustls-tls"]
+
+[build-dependencies]
+zstd = "0.13.2"
+
+[features]
+default = ["bin"]
+bin     = ["clap", "colored", "pretty_env_logger"]
+
+[lints.clippy]
+all                     = { level = "warn", priority = -1 }
+cargo                   = { level = "warn", priority = -1 }
+doc_markdown            = "allow"
+missing_errors_doc      = "allow"
+missing_panics_doc      = "allow"
+multiple_crate_versions = "allow"
+pedantic                = { level = "warn", priority = -1 }
+wildcard_imports        = "allow"
+
+[lints.rust]
+unsafe_code           = "allow"
+unused_qualifications = "warn"
+
+[profile.release]
+opt-level = "s"
+strip     = true
+lto       = true
+panic     = "unwind"

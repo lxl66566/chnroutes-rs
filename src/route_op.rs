@@ -3,7 +3,7 @@ use std::{
     sync::OnceLock,
 };
 
-use futures_util::{stream::FuturesOrdered, TryStreamExt};
+use futures_util::{TryStreamExt, stream::FuturesOrdered};
 use ipnet::IpNet;
 use net_route::{Handle, Route};
 use tokio::sync::OnceCell;
@@ -36,7 +36,7 @@ pub async fn get_gateway(handle: &Handle) -> Result<(Option<Ipv4Addr>, Option<Ip
         match ip {
             IpAddr::V4(ipv4) if v4.is_none() => v4 = Some(ipv4),
             IpAddr::V6(ipv6) if v6.is_none() => v6 = Some(ipv6),
-            _ => {}
+            _ => {},
         }
         if v4.is_some() && v6.is_some() {
             return Ok((v4, v6));
@@ -79,9 +79,8 @@ pub async fn add_route(handle: &Handle, route: &IpNet) -> Result<()> {
         // it into std::io::Error with no more information.
         if err.kind() == std::io::ErrorKind::Other && err.to_string().contains("exists") {
             return Err(RouteOpError::RouteAlreadyExistsError);
-        } else {
-            return Err(err.into());
         }
+        return Err(err.into());
     }
     Ok(())
 }
@@ -96,9 +95,8 @@ pub async fn del_route(handle: &Handle, route: &IpNet) -> Result<()> {
     if let Err(err) = result {
         if err.kind() == std::io::ErrorKind::NotFound {
             return Err(RouteOpError::RouteNotFoundError);
-        } else {
-            return Err(err.into());
         }
+        return Err(err.into());
     }
     Ok(())
 }
@@ -117,19 +115,19 @@ pub async fn add_routes(routes: &[IpNet]) -> Result<()> {
     let mut ignored = 0;
     loop {
         match futures.try_next().await {
-            Ok(Some(_)) => {
+            Ok(Some(())) => {
                 index += 1;
-            }
+            },
             Ok(None) => {
                 break;
-            }
+            },
             Err(RouteOpError::RouteAlreadyExistsError) => {
                 ignored += 1;
-            }
+            },
             Err(err) => {
                 error!("Error while adding {} th route: {:?}", index, err);
                 return Err(err);
-            }
+            },
         }
     }
     info!("Routes added success, ignored: {}.", ignored);
@@ -148,19 +146,19 @@ pub async fn del_routes(routes: &[IpNet]) -> Result<()> {
     let mut ignored = 0;
     loop {
         match futures.try_next().await {
-            Ok(Some(_)) => {
+            Ok(Some(())) => {
                 index += 1;
-            }
+            },
             Ok(None) => {
                 break;
-            }
+            },
             Err(RouteOpError::RouteNotFoundError) => {
                 ignored += 1;
-            }
+            },
             Err(err) => {
                 error!("Error while removing {} th route: {:?}", index, err);
                 return Err(err);
-            }
+            },
         }
     }
     info!("Routes removed success, ignored: {}.", ignored);
@@ -189,12 +187,14 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(handle
-            .list()
-            .await
-            .unwrap()
-            .into_iter()
-            .any(|r| r.destination == dest));
+        assert!(
+            handle
+                .list()
+                .await
+                .unwrap()
+                .into_iter()
+                .any(|r| r.destination == dest)
+        );
 
         del_route(&handle, &IpNet::new(dest, 32).unwrap())
             .await

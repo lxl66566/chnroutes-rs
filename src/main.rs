@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use chnroutes::Source;
 use clap::Parser;
 use colored::Colorize;
 use log::LevelFilter;
@@ -58,12 +59,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let source = &cli.source;
     match cli.subcommand {
         Subcommand::Export(ExportArgs { platform }) => {
-            export(platform.as_deref(), source.as_deref())
-        }
-        Subcommand::Up => chnroutes::up(&Default::default()).await?,
+            export(platform.as_deref(), source.as_deref());
+        },
+        Subcommand::Up => chnroutes::up(&Source::default()).await?,
         Subcommand::Down => {
-            chnroutes::down(&Default::default()).await?;
-        }
+            chnroutes::down(&Source::default()).await?;
+        },
     }
     Ok(())
 }
@@ -71,12 +72,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 pub fn export(platform: Option<&str>, _source: Option<&str>) {
     let target = chnroutes::Target::from_str(platform.unwrap_or_default());
     if let Ok(target) = target {
-        target.export_file(&Default::default()).unwrap();
+        target.export_file(&Source::default()).unwrap();
     } else {
         eprint!("Unknown platform. platform must in ");
-        ["windows", "mac", "linux", "android", "openvpn"]
-            .iter()
-            .for_each(|x| eprint!("{}, ", x.green()));
+        for x in ["windows", "mac", "linux", "android", "openvpn"] {
+            eprint!("{}, ", x.green());
+        }
         eprintln!();
         std::process::exit(1);
     }

@@ -8,6 +8,6 @@ async fn main() -> Result<()> {
     /// Get the user script
     let user_script: Result<(String, Option<String>)> = Target::Linux.export_str(&Source::apnic);
     /// Apply rules to system route table
-    chnroutes::up(&Default::default()).await?;
+    chnroutes::up(&Source::default()).await?;
     Ok(())
 }

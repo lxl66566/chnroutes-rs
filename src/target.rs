@@ -2,7 +2,7 @@ use std::{path::PathBuf, str::FromStr};
 
 use ipnet::IpNet;
 
-use crate::{source::Source, Error, Result};
+use crate::{Error, Result, source::Source};
 
 /// The Targets for exporting scripts, like chnroutes.py do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,19 +21,19 @@ impl Target {
     ///
     /// OpenVPN => Append the content to openvpn config file.
     /// Others => Return two Strings representing the upscript and downscript.
-    pub fn export_str(&self, source: &Source) -> crate::error::Result<(String, Option<String>)> {
+    pub fn export_str(&self, source: &Source) -> Result<(String, Option<String>)> {
         let source_ips = source.get_cn_ips()?;
         match self {
-            Self::OpenVPN(metric) => Ok((export_openvpn(source_ips, metric), None)),
-            Self::Linux => Ok(export_linux(source_ips)),
-            Self::Mac => Ok(export_mac(source_ips)),
-            Self::Windows => Ok(export_windows(source_ips)),
-            Self::Android => Ok(export_android(source_ips)),
+            Self::OpenVPN(metric) => Ok((export_openvpn(source_ips, *metric), None)),
+            Self::Linux => Ok(export_linux(&source_ips)),
+            Self::Mac => Ok(export_mac(&source_ips)),
+            Self::Windows => Ok(export_windows(&source_ips)),
+            Self::Android => Ok(export_android(&source_ips)),
         }
     }
 
     /// write the export script as file to current dir.
-    pub fn export_file(&self, source: &Source) -> crate::error::Result<()> {
+    pub fn export_file(&self, source: &Source) -> Result<()> {
         let (up, down) = self.export_str(source)?;
         match self {
             Self::OpenVPN(_) => std::fs::write("openvpn_conf.txt", up)?,
@@ -51,7 +51,7 @@ impl Target {
                 if let Some(down) = down {
                     std::fs::write(down_filename, down)?;
                 }
-            }
+            },
         }
         Ok(())
     }
@@ -59,6 +59,7 @@ impl Target {
 
 impl FromStr for Target {
     type Err = Error;
+
     fn from_str(s: &str) -> Result<Self> {
         match s {
             "openvpn" => Ok(Self::OpenVPN(1)),
@@ -71,7 +72,7 @@ impl FromStr for Target {
     }
 }
 
-fn export_openvpn(ips: Vec<IpNet>, metric: &u32) -> String {
+fn export_openvpn(ips: Vec<IpNet>, metric: u32) -> String {
     ips.into_iter()
         .map(|ip| {
             format!(
@@ -85,7 +86,7 @@ fn export_openvpn(ips: Vec<IpNet>, metric: &u32) -> String {
         .join("\n")
 }
 
-fn export_linux(ips: Vec<IpNet>) -> (String, Option<String>) {
+fn export_linux(ips: &[IpNet]) -> (String, Option<String>) {
     let mut up = r#"#!/bin/bash
 export PATH="/bin:/sbin:/usr/sbin:/usr/bin"
 
@@ -124,7 +125,7 @@ OLDGW=`cat /tmp/vpn_oldgw`
     );
     down.push_str(
         ips.iter()
-            .map(|ip| format!("route del -net {} netmask {}", ip.addr(), ip.netmask(),))
+            .map(|ip| format!("route del -net {} netmask {}", ip.addr(), ip.netmask()))
             .collect::<Vec<String>>()
             .join("\n")
             .as_str(),
@@ -132,7 +133,7 @@ OLDGW=`cat /tmp/vpn_oldgw`
     (up, Some(down))
 }
 
-fn export_mac(ips: Vec<IpNet>) -> (String, Option<String>) {
+fn export_mac(ips: &[IpNet]) -> (String, Option<String>) {
     let mut up = r#"export PATH="/bin:/sbin:/usr/sbin:/usr/bin"
     
 OLDGW=`netstat -nr | grep '^default' | grep -v 'ppp' | sed 's/default *\([0-9\.]*\) .*/\1/' | awk '{if($1){print $1}}'`
@@ -167,14 +168,14 @@ route delete 192.168.0.0/16 "${OLDGW}"
 
     up.push_str(
         ips.iter()
-            .map(|ip| format!(r#"route add {} "${{OLDGW}}""#, ip))
+            .map(|ip| format!(r#"route add {ip} "${{OLDGW}}""#))
             .collect::<Vec<String>>()
             .join("\n")
             .as_str(),
     );
     down.push_str(
         ips.iter()
-            .map(|ip| format!(r#"route delete {} ${{OLDGW}}"#, ip))
+            .map(|ip| format!(r"route delete {ip} ${{OLDGW}}"))
             .collect::<Vec<String>>()
             .join("\n")
             .as_str(),
@@ -182,7 +183,7 @@ route delete 192.168.0.0/16 "${OLDGW}"
     (up, Some(down))
 }
 
-fn export_windows(ips: Vec<IpNet>) -> (String, Option<String>) {
+fn export_windows(ips: &[IpNet]) -> (String, Option<String>) {
     let mut up = r#"@echo off
 for /F "tokens=3" %%* in ('route print ^| findstr "\<0.0.0.0\>"') do set "gw=%%*"
 echo gw=%gw%
@@ -190,16 +191,16 @@ ipconfig /flushdns
 
 "#
     .to_string();
-    let mut down = r#"@echo off
+    let mut down = r"@echo off
 
-"#
+"
     .to_string();
 
     up.push_str(
         ips.iter()
             .map(|ip| {
                 format!(
-                    r#"route add {} mask {} {} metric 1"#,
+                    r"route add {} mask {} {} metric 1",
                     ip.addr(),
                     ip.netmask(),
                     "%gw%",
@@ -211,7 +212,7 @@ ipconfig /flushdns
     );
     down.push_str(
         ips.iter()
-            .map(|ip| format!(r#"route delete {}"#, ip.addr()))
+            .map(|ip| format!(r"route delete {}", ip.addr()))
             .collect::<Vec<String>>()
             .join("\n")
             .as_str(),
@@ -219,8 +220,8 @@ ipconfig /flushdns
     (up, Some(down))
 }
 
-fn export_android(ips: Vec<IpNet>) -> (String, Option<String>) {
-    let mut up = r#"#!/bin/sh
+fn export_android(ips: &[IpNet]) -> (String, Option<String>) {
+    let mut up = r"#!/bin/sh
 alias nestat='/system/xbin/busybox netstat'
 alias grep='/system/xbin/busybox grep'
 alias awk='/system/xbin/busybox awk'
@@ -228,19 +229,19 @@ alias route='/system/xbin/busybox route'
 
 OLDGW=`netstat -rn | grep ^0\.0\.0\.0 | awk '{print $2}'`
 
-"#
+"
     .to_string();
-    let mut down = r#"#!/bin/sh
+    let mut down = r"#!/bin/sh
 alias route='/system/xbin/busybox route'
     
-"#
+"
     .to_string();
 
     up.push_str(
         ips.iter()
             .map(|ip| {
                 format!(
-                    r#"route add -net {} netmask {} gw $OLDGW"#,
+                    r"route add -net {} netmask {} gw $OLDGW",
                     ip.addr(),
                     ip.netmask(),
                 )
@@ -251,7 +252,7 @@ alias route='/system/xbin/busybox route'
     );
     down.push_str(
         ips.iter()
-            .map(|ip| format!(r#"route del -net {} netmask {}"#, ip.addr(), ip.netmask()))
+            .map(|ip| format!(r"route del -net {} netmask {}", ip.addr(), ip.netmask()))
             .collect::<Vec<String>>()
             .join("\n")
             .as_str(),

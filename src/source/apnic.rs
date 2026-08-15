@@ -19,13 +19,16 @@ pub fn fetch_ip_data() -> crate::error::Result<Vec<IpNet>> {
         .timeout(Duration::from_secs(10))
         .build()?;
     let url = "https://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest";
-    let data = client.get(url).send().map(|r| r.text());
+    let data = client
+        .get(url)
+        .send()
+        .map(reqwest::blocking::Response::text);
     match data {
         Ok(Ok(data)) => {
             info!("Fetching data from apnic.net done");
             cache.save_str(&data)?;
             Ok(parse_ip_data(&data))
-        }
+        },
         // If the data fetch failed, use the built-in data instead.
         Ok(Err(e)) | Err(e) => {
             warn!("Fetching data from apnic.net failed, use built-in apnic data: {e:?}");
@@ -35,11 +38,12 @@ pub fn fetch_ip_data() -> crate::error::Result<Vec<IpNet>> {
             Ok(parse_ip_data(
                 &String::from_utf8(de).expect("The cache file should be valid UTF-8."),
             ))
-        }
+        },
     }
 }
 
 /// Parse IP data from str.
+#[must_use]
 pub fn parse_ip_data(content: &str) -> Vec<IpNet> {
     content
         .lines()
@@ -48,7 +52,8 @@ pub fn parse_ip_data(content: &str) -> Vec<IpNet> {
         .filter(|item| item[0] == "apnic" && item[1] == "CN" && ["ipv4", "ipv6"].contains(&item[2]))
         .map(|item| {
             let prefix_len = if item[2] == "ipv4" {
-                32 - (item[4].parse::<u32>().expect("item[4] must be a number") as f32).log2() as u8
+                let count = item[4].parse::<u32>().expect("item[4] must be a number");
+                u8::try_from(32 - count.ilog2()).expect("prefix length must fit in a u8")
             } else {
                 item[4].parse::<u8>().expect("item[4] must be a number")
             };

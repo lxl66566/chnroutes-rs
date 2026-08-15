@@ -30,7 +30,7 @@ impl Cache {
     }
 
     /// Load file from cache, if the file not found or expired, return [`None`]
-    pub fn load(&self) -> std::result::Result<Option<Vec<u8>>, CacheError> {
+    pub fn load(&self) -> Result<Option<Vec<u8>>, CacheError> {
         let path = self.get_path();
         if path.exists() {
             let metadata = std::fs::metadata(&path)?;
@@ -42,13 +42,13 @@ impl Cache {
         Ok(None)
     }
 
-    pub fn save_str<'a>(&self, s: &'a str) -> std::result::Result<&'a str, CacheError> {
+    pub fn save_str<'a>(&self, s: &'a str) -> Result<&'a str, CacheError> {
         self.save(s.as_bytes())?;
         Ok(s)
     }
 
     #[allow(unused)]
-    pub fn remove(&self) -> std::result::Result<(), CacheError> {
+    pub fn remove(&self) -> Result<(), CacheError> {
         let path = self.get_path();
         if path.exists() {
             std::fs::remove_file(path)?;
