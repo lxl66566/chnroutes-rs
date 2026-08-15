@@ -1,4 +1,4 @@
-use std::{path::PathBuf, str::FromStr};
+use std::{path::Path, str::FromStr};
 
 use ipnet::IpNet;
 
@@ -35,21 +35,20 @@ impl Target {
     /// write the export script as file to current dir.
     pub async fn export_file(&self, source: &Source) -> Result<()> {
         let (up, down) = self.export_str(source).await?;
+        self.write_scripts(Path::new("."), &up, down.as_deref())
+    }
+
+    fn write_scripts(self, dir: &Path, up: &str, down: Option<&str>) -> Result<()> {
         match self {
-            Self::OpenVPN(_) => std::fs::write("openvpn_conf.txt", up)?,
+            Self::OpenVPN(_) => std::fs::write(dir.join("openvpn_conf.txt"), up)?,
             other => {
-                let mut up_filename = PathBuf::from("up");
-                let mut down_filename = PathBuf::from("down");
                 let extension = match other {
                     Self::Windows => "bat",
                     _ => "sh",
                 };
-                up_filename.set_extension(extension);
-                down_filename.set_extension(extension);
-
-                std::fs::write(up_filename, up)?;
+                std::fs::write(dir.join(format!("up.{extension}")), up)?;
                 if let Some(down) = down {
-                    std::fs::write(down_filename, down)?;
+                    std::fs::write(dir.join(format!("down.{extension}")), down)?;
                 }
             },
         }
@@ -262,15 +261,23 @@ alias route='/system/xbin/busybox route'
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
-
     use super::*;
 
-    #[tokio::test]
-    async fn test_export_file() {
-        Target::Windows.export_file(&Source::test).await.unwrap();
-        let up = Path::new("up.bat");
-        let down = Path::new("down.bat");
-        assert!(up.exists() && down.exists());
+    #[test]
+    fn test_write_scripts() {
+        let dir = std::env::temp_dir().join(format!("chnroutes-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        Target::Windows
+            .write_scripts(&dir, "up-content", Some("down-content"))
+            .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(dir.join("up.bat")).unwrap(),
+            "up-content"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.join("down.bat")).unwrap(),
+            "down-content"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
