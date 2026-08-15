@@ -4,10 +4,15 @@ use ipnet::{IpNet, Ipv4Net};
 
 use crate::{Error, Result, source::Source};
 
+/// Default metric for OpenVPN `route` directives.
+const DEFAULT_OPENVPN_METRIC: u32 = 1;
+
 /// The Targets for exporting scripts, like chnroutes.py do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "bin", derive(clap::ValueEnum))]
 pub enum Target {
-    OpenVPN(u32),
+    #[cfg_attr(feature = "bin", value(name = "openvpn"))]
+    OpenVpn,
     Linux,
     Mac,
     Windows,
@@ -26,7 +31,7 @@ impl Target {
         // so IPv6 entries are filtered out at the type level.
         let source_ips = filter_ipv4(&source.get_cn_ips().await?);
         match self {
-            Self::OpenVPN(metric) => Ok((export_openvpn(&source_ips, *metric), None)),
+            Self::OpenVpn => Ok((export_openvpn(&source_ips, DEFAULT_OPENVPN_METRIC), None)),
             Self::Linux => Ok(export_linux(&source_ips)),
             Self::Mac => Ok(export_mac(&source_ips)),
             Self::Windows => Ok(export_windows(&source_ips)),
@@ -34,15 +39,17 @@ impl Target {
         }
     }
 
-    /// write the export script as file to current dir.
-    pub async fn export_file(&self, source: &Source) -> Result<()> {
+    /// Write the export script as files into `dir`.
+    pub async fn export_file(&self, source: &Source, dir: impl AsRef<Path>) -> Result<()> {
+        let dir = dir.as_ref();
+        std::fs::create_dir_all(dir)?;
         let (up, down) = self.export_str(source).await?;
-        self.write_scripts(Path::new("."), &up, down.as_deref())
+        self.write_scripts(dir, &up, down.as_deref())
     }
 
     fn write_scripts(self, dir: &Path, up: &str, down: Option<&str>) -> Result<()> {
         match self {
-            Self::OpenVPN(_) => std::fs::write(dir.join("openvpn_conf.txt"), up)?,
+            Self::OpenVpn => std::fs::write(dir.join("openvpn_conf.txt"), up)?,
             other => {
                 let extension = match other {
                     Self::Windows => "bat",
@@ -63,7 +70,7 @@ impl FromStr for Target {
 
     fn from_str(s: &str) -> Result<Self> {
         match s {
-            "openvpn" => Ok(Self::OpenVPN(1)),
+            "openvpn" => Ok(Self::OpenVpn),
             "linux" => Ok(Self::Linux),
             "mac" => Ok(Self::Mac),
             "windows" => Ok(Self::Windows),

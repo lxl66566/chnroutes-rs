@@ -1,8 +1,7 @@
-use std::str::FromStr;
+use std::path::PathBuf;
 
-use chnroutes::Source;
+use chnroutes::{Source, Target};
 use clap::Parser;
-use colored::Colorize;
 use log::LevelFilter;
 
 #[inline]
@@ -25,13 +24,12 @@ pub fn log_init_with_default_level(level: LevelFilter) {
 
 #[derive(Parser, Clone, Debug)]
 #[command(author, version, about, long_about = None)]
-// #[clap(args_conflicts_with_subcommands = true)]
 pub struct Cli {
     #[command(subcommand)]
     pub subcommand: Subcommand,
-    /// WIP: source to generate ip rules
-    #[arg(short, long)]
-    source: Option<String>,
+    /// Source to generate ip rules
+    #[arg(short, long, value_enum, default_value_t = Source::Apnic)]
+    source: Source,
 }
 
 #[derive(Debug, clap::Subcommand, Clone)]
@@ -47,38 +45,23 @@ pub enum Subcommand {
 #[derive(Debug, clap::Args, Clone)]
 pub struct ExportArgs {
     /// The platform of script you want to export
-    #[arg(short, long)]
-    platform: Option<String>,
+    #[arg(short, long, value_enum)]
+    platform: Target,
+    /// Directory to write the script files into
+    #[arg(short, long, default_value = ".")]
+    output: PathBuf,
 }
 
-// TODO: deal with source
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn main() -> chnroutes::Result<()> {
     log_init();
     let cli = Cli::parse();
-    let source = &cli.source;
     match cli.subcommand {
-        Subcommand::Export(ExportArgs { platform }) => {
-            export(platform.as_deref(), source.as_deref()).await;
+        Subcommand::Export(args) => {
+            args.platform.export_file(&cli.source, &args.output).await?;
         },
-        Subcommand::Up => chnroutes::up(&Source::default()).await?,
-        Subcommand::Down => {
-            chnroutes::down(&Source::default()).await?;
-        },
+        Subcommand::Up => chnroutes::up(&cli.source).await?,
+        Subcommand::Down => chnroutes::down(&cli.source).await?,
     }
     Ok(())
-}
-
-pub async fn export(platform: Option<&str>, _source: Option<&str>) {
-    let target = chnroutes::Target::from_str(platform.unwrap_or_default());
-    if let Ok(target) = target {
-        target.export_file(&Source::default()).await.unwrap();
-    } else {
-        eprint!("Unknown platform. platform must in ");
-        for x in ["windows", "mac", "linux", "android", "openvpn"] {
-            eprint!("{}, ", x.green());
-        }
-        eprintln!();
-        std::process::exit(1);
-    }
 }

@@ -4,9 +4,18 @@ pub mod apnic;
 
 /// Choose a source to generate ip map.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "bin", derive(clap::ValueEnum))]
 pub enum Source {
     #[default]
     Apnic,
+}
+
+impl std::fmt::Display for Source {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Apnic => f.write_str("apnic"),
+        }
+    }
 }
 
 impl Source {
