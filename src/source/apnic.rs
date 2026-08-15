@@ -42,37 +42,66 @@ pub fn fetch_ip_data() -> crate::error::Result<Vec<IpNet>> {
 
 /// Load the cached source file, treating a corrupted (non UTF-8) cache as a miss.
 fn load_cache(cache: &Cache) -> Result<Option<String>, CacheError> {
-    match cache.load()? {
-        Some(bytes) => match String::from_utf8(bytes) {
-            Ok(text) => Ok(Some(text)),
-            Err(_) => {
-                warn!("Cache file is corrupted, removing it and refetching ...");
-                cache.remove()?;
-                Ok(None)
-            },
-        },
-        None => Ok(None),
+    let Some(bytes) = cache.load()? else {
+        return Ok(None);
+    };
+    if let Ok(text) = String::from_utf8(bytes) {
+        return Ok(Some(text));
     }
+    warn!("Cache file is corrupted, removing it and refetching ...");
+    cache.remove()?;
+    Ok(None)
 }
 
 /// Parse IP data from str.
+///
+/// Only `apnic|CN|ipv4/ipv6` records are kept. Malformed records are skipped
+/// with a warning instead of aborting the whole parse.
 #[must_use]
 pub fn parse_ip_data(content: &str) -> Vec<IpNet> {
     content
         .lines()
         .map(|line| line.split('|').collect::<Vec<&str>>())
-        .filter(|item| item.len() >= 5)
-        .filter(|item| item[0] == "apnic" && item[1] == "CN" && ["ipv4", "ipv6"].contains(&item[2]))
-        .map(|item| {
-            let prefix_len = if item[2] == "ipv4" {
-                let count = item[4].parse::<u32>().expect("item[4] must be a number");
-                u8::try_from(32 - count.ilog2()).expect("prefix length must fit in a u8")
-            } else {
-                item[4].parse::<u8>().expect("item[4] must be a number")
-            };
-            IpNet::new(IpAddr::from_str(item[3]).unwrap(), prefix_len).unwrap()
+        .filter(|fields| {
+            fields.len() >= 5
+                && fields[0] == "apnic"
+                && fields[1] == "CN"
+                && matches!(fields[2], "ipv4" | "ipv6")
+        })
+        .filter_map(|fields| {
+            parse_cn_record(&fields)
+                .map_err(|reason| {
+                    warn!("Skipping invalid apnic record {:?}: {reason}", fields.join("|"));
+                })
+                .ok()
         })
         .collect()
+}
+
+/// Parse a single `apnic|CN|...` record into an [`IpNet`].
+///
+/// The delegated-apnic format encodes IPv4 ranges as `start|count` and IPv6
+/// ranges as `start|prefix_len`.
+fn parse_cn_record(fields: &[&str]) -> Result<IpNet, String> {
+    let addr = IpAddr::from_str(fields[3]).map_err(|e| format!("invalid address: {e}"))?;
+    let prefix_len = match fields[2] {
+        "ipv4" => {
+            let count: u32 = fields[4]
+                .parse()
+                .map_err(|e| format!("invalid address count: {e}"))?;
+            // A range whose size is not a power of two cannot be a single CIDR
+            // block; `ilog2` would silently round down and widen the prefix.
+            if !count.is_power_of_two() {
+                return Err(format!("address count {count} is not a power of two"));
+            }
+            32 - u8::try_from(count.ilog2()).map_err(|e| format!("prefix overflow: {e}"))?
+        },
+        "ipv6" => fields[4]
+            .parse::<u8>()
+            .map_err(|e| format!("invalid prefix length: {e}"))?,
+        kind => return Err(format!("unknown record type {kind:?}")),
+    };
+    IpNet::new(addr, prefix_len).map_err(|e| format!("invalid network: {e}"))
 }
 
 #[cfg(test)]
@@ -100,6 +129,30 @@ mod tests {
                 .as_str(),
         );
         assert_eq!(results[0], IpNet::from_str("1.0.1.0/24").unwrap());
+    }
+
+    #[test]
+    fn test_parse_ip_data_skips_invalid_records() {
+        let content = "\
+apnic|CN|ipv4|1.0.1.0|256|20110414|allocated
+apnic|CN|ipv6|2001:250::|35|20040810|allocated
+apnic|JP|ipv4|1.0.16.0|4096|20110414|allocated
+apnic|CN|asn|9394|2|20010719|allocated
+apnic|CN|ipv4|2.0.0.0|0|20110414|allocated
+apnic|CN|ipv4|3.0.0.0|1000|20110414|allocated
+apnic|CN|ipv4|not-an-ip|256|20110414|allocated
+apnic|CN|ipv6|2001:251::|not-a-number|20040810|allocated
+apnic|CN|ipv6|2001:252::|200|20040810|allocated
+apnic|CN|ipv4
+";
+        let results = parse_ip_data(content);
+        assert_eq!(
+            results,
+            vec![
+                IpNet::from_str("1.0.1.0/24").unwrap(),
+                IpNet::from_str("2001:250::/35").unwrap(),
+            ]
+        );
     }
 
     #[test]
