@@ -1,6 +1,6 @@
 use std::{path::Path, str::FromStr};
 
-use ipnet::IpNet;
+use ipnet::{IpNet, Ipv4Net};
 
 use crate::{Error, Result, source::Source};
 
@@ -22,9 +22,11 @@ impl Target {
     /// OpenVPN => Append the content to openvpn config file.
     /// Others => Return two Strings representing the upscript and downscript.
     pub async fn export_str(&self, source: &Source) -> Result<(String, Option<String>)> {
-        let source_ips = source.get_cn_ips().await?;
+        // Export scripts only speak IPv4 (`route add -net ... netmask ...`),
+        // so IPv6 entries are filtered out at the type level.
+        let source_ips = filter_ipv4(&source.get_cn_ips().await?);
         match self {
-            Self::OpenVPN(metric) => Ok((export_openvpn(source_ips, *metric), None)),
+            Self::OpenVPN(metric) => Ok((export_openvpn(&source_ips, *metric), None)),
             Self::Linux => Ok(export_linux(&source_ips)),
             Self::Mac => Ok(export_mac(&source_ips)),
             Self::Windows => Ok(export_windows(&source_ips)),
@@ -71,8 +73,19 @@ impl FromStr for Target {
     }
 }
 
-fn export_openvpn(ips: Vec<IpNet>, metric: u32) -> String {
-    ips.into_iter()
+/// Collect the IPv4 networks, dropping IPv6 entries.
+#[must_use]
+pub fn filter_ipv4(ips: &[IpNet]) -> Vec<Ipv4Net> {
+    ips.iter()
+        .filter_map(|net| match net {
+            IpNet::V4(v4) => Some(*v4),
+            IpNet::V6(_) => None,
+        })
+        .collect()
+}
+
+fn export_openvpn(ips: &[Ipv4Net], metric: u32) -> String {
+    ips.iter()
         .map(|ip| {
             format!(
                 "route {} {} net_gateway {}",
@@ -85,7 +98,7 @@ fn export_openvpn(ips: Vec<IpNet>, metric: u32) -> String {
         .join("\n")
 }
 
-fn export_linux(ips: &[IpNet]) -> (String, Option<String>) {
+fn export_linux(ips: &[Ipv4Net]) -> (String, Option<String>) {
     let mut up = r#"#!/bin/bash
 export PATH="/bin:/sbin:/usr/sbin:/usr/bin"
 
@@ -132,7 +145,7 @@ OLDGW=`cat /tmp/vpn_oldgw`
     (up, Some(down))
 }
 
-fn export_mac(ips: &[IpNet]) -> (String, Option<String>) {
+fn export_mac(ips: &[Ipv4Net]) -> (String, Option<String>) {
     let mut up = r#"export PATH="/bin:/sbin:/usr/sbin:/usr/bin"
     
 OLDGW=`netstat -nr | grep '^default' | grep -v 'ppp' | sed 's/default *\([0-9\.]*\) .*/\1/' | awk '{if($1){print $1}}'`
@@ -182,7 +195,7 @@ route delete 192.168.0.0/16 "${OLDGW}"
     (up, Some(down))
 }
 
-fn export_windows(ips: &[IpNet]) -> (String, Option<String>) {
+fn export_windows(ips: &[Ipv4Net]) -> (String, Option<String>) {
     let mut up = r#"@echo off
 for /F "tokens=3" %%* in ('route print ^| findstr "\<0.0.0.0\>"') do set "gw=%%*"
 echo gw=%gw%
@@ -219,7 +232,7 @@ ipconfig /flushdns
     (up, Some(down))
 }
 
-fn export_android(ips: &[IpNet]) -> (String, Option<String>) {
+fn export_android(ips: &[Ipv4Net]) -> (String, Option<String>) {
     let mut up = r"#!/bin/sh
 alias nestat='/system/xbin/busybox netstat'
 alias grep='/system/xbin/busybox grep'
@@ -262,6 +275,44 @@ alias route='/system/xbin/busybox route'
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sample_v4() -> Vec<Ipv4Net> {
+        vec![Ipv4Net::from_str("1.0.1.0/24").unwrap()]
+    }
+
+    #[test]
+    fn test_filter_ipv4() {
+        let ips = [
+            IpNet::from_str("1.0.1.0/24").unwrap(),
+            IpNet::from_str("2001:250::/35").unwrap(),
+        ];
+        assert_eq!(filter_ipv4(&ips), sample_v4());
+    }
+
+    #[test]
+    fn test_export_linux() {
+        let (up, down) = export_linux(&sample_v4());
+        assert!(up.contains("route add -net 1.0.1.0 netmask 255.255.255.0 gw $OLDGW"));
+        assert!(
+            down.unwrap()
+                .contains("route del -net 1.0.1.0 netmask 255.255.255.0")
+        );
+    }
+
+    #[test]
+    fn test_export_windows() {
+        let (up, down) = export_windows(&sample_v4());
+        assert!(up.contains("route add 1.0.1.0 mask 255.255.255.0 %gw% metric 1"));
+        assert!(down.unwrap().contains("route delete 1.0.1.0"));
+    }
+
+    #[test]
+    fn test_export_openvpn() {
+        assert_eq!(
+            export_openvpn(&sample_v4(), 1),
+            "route 1.0.1.0 255.255.255.0 net_gateway 1"
+        );
+    }
 
     #[test]
     fn test_write_scripts() {
