@@ -35,15 +35,25 @@ fn default_interface_index() -> Result<u32> {
         .map_err(RouteOpError::GetInterfaceError)
 }
 
-/// Get default gateway ipv4 and ipv6.
+/// Get default gateway ipv4 and ipv6 of the system default interface.
 pub async fn get_gateway(handle: &Handle) -> Result<(Option<Ipv4Addr>, Option<Ipv6Addr>)> {
+    resolve_gateways(handle, default_interface_index()?).await
+}
+
+/// Resolve the default gateways among the default routes of the given interface.
+async fn resolve_gateways(
+    handle: &Handle,
+    ifindex: u32,
+) -> Result<(Option<Ipv4Addr>, Option<Ipv6Addr>)> {
     let (mut v4, mut v6) = (None, None);
     let routes = handle
         .list()
         .await?
         .into_iter()
-        .filter(|r| r.gateway.is_some())
-        .filter(|r| r.destination.is_unspecified())
+        // Only consider default routes on the default interface: with a VPN
+        // connected, other interfaces carry their own default routes whose
+        // gateways must not be picked here.
+        .filter(|r| r.destination.is_unspecified() && r.ifindex == Some(ifindex))
         .filter_map(|r| r.gateway);
     for ip in routes {
         match ip {
@@ -69,10 +79,11 @@ pub struct RouteContext<'a> {
 impl RouteContext<'_> {
     /// Create a context for adding routes, resolving the default gateways.
     pub async fn for_add(handle: &Handle) -> Result<RouteContext<'_>> {
+        let ifindex = default_interface_index()?;
         Ok(RouteContext {
             handle,
-            ifindex: default_interface_index()?,
-            gateways: get_gateway(handle).await?,
+            ifindex,
+            gateways: resolve_gateways(handle, ifindex).await?,
         })
     }
 
@@ -127,17 +138,26 @@ impl RouteContext<'_> {
 /// net-route surfaces OS failures as plain `std::io::Error`s, so map the
 /// well-known cases onto dedicated error variants.
 fn classify_add_error(err: std::io::Error) -> RouteOpError {
-    // Received a netlink error message File exists (os error 17)
-    // We cannot use other way to deal with this error because net-route crate turns
-    // it into std::io::Error with no more information.
-    if err.kind() == std::io::ErrorKind::Other && err.to_string().contains("exists") {
+    if is_already_exists(&err) {
         return RouteOpError::RouteAlreadyExistsError;
     }
     err.into()
 }
 
+fn is_already_exists(err: &std::io::Error) -> bool {
+    // Linux netlink EEXIST (17), Windows ERROR_OBJECT_ALREADY_EXISTS (5010).
+    if matches!(err.raw_os_error(), Some(17 | 5010)) {
+        return true;
+    }
+    // Received a netlink error message File exists (os error 17)
+    // We cannot use other way to deal with this error because net-route crate turns
+    // it into std::io::Error with no more information.
+    err.kind() == std::io::ErrorKind::Other && err.to_string().contains("exists")
+}
+
 fn classify_delete_error(err: std::io::Error) -> RouteOpError {
-    if err.kind() == std::io::ErrorKind::NotFound {
+    // Linux netlink ESRCH (3), Windows ERROR_NOT_FOUND (1168).
+    if err.kind() == std::io::ErrorKind::NotFound || matches!(err.raw_os_error(), Some(3 | 1168)) {
         return RouteOpError::RouteNotFoundError;
     }
     err.into()
