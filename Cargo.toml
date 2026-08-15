@@ -25,27 +25,23 @@ name = "basic"
 path = "examples/basic.rs"
 
 [dependencies]
-clap              = { version = "4.5.23", features = ["derive"], optional = true }
-colored           = { version = "2.1.0", optional = true }
-enum-tools        = "0.5.3"
-futures-util      = "0.3.31"
-ipnet             = "2.9.0"
-log               = "0.4.22"
-net-route         = "0.4.5"
-netdev            = "0.31.0"
-once-fn           = "0.2.0"
+clap              = { version = "4.6", features = ["derive"], optional = true }
+colored           = { version = "3", optional = true }
+enum-tools        = "0.5"
+futures-util      = "0.3"
+ipnet             = "2.12"
+log               = "0.4"
+net-route         = "0.4"
+netdev            = "0.46"
+once-fn           = "0.2"
 pretty_env_logger = { version = "0.5.0", optional = true }
-thiserror         = "2.0.7"
-tokio             = { version = "1.42.0", features = ["macros", "rt", "rt-multi-thread"] }
-zstd              = "0.13.2"
-
-[dependencies.reqwest]
-version          = "0.12.9"
-default-features = false
-features         = ["blocking", "rustls-tls"]
+reqwest           = { version = "0.13", features = ["blocking"] }
+thiserror         = "2"
+tokio             = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
+zstd              = "0.13"
 
 [build-dependencies]
-zstd = "0.13.2"
+zstd = "0.13"
 
 [features]
 default = ["bin"]
