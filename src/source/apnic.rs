@@ -75,7 +75,10 @@ pub fn parse_ip_data(content: &str) -> Vec<IpNet> {
         .filter_map(|fields| {
             parse_cn_record(&fields)
                 .map_err(|reason| {
-                    warn!("Skipping invalid apnic record {:?}: {reason}", fields.join("|"));
+                    warn!(
+                        "Skipping invalid apnic record {:?}: {reason}",
+                        fields.join("|")
+                    );
                 })
                 .ok()
         })
@@ -143,13 +146,10 @@ apnic|CN|ipv6|2001:252::|200|20040810|allocated
 apnic|CN|ipv4
 ";
         let results = parse_ip_data(content);
-        assert_eq!(
-            results,
-            vec![
-                IpNet::from_str("1.0.1.0/24").unwrap(),
-                IpNet::from_str("2001:250::/35").unwrap(),
-            ]
-        );
+        assert_eq!(results, vec![
+            IpNet::from_str("1.0.1.0/24").unwrap(),
+            IpNet::from_str("2001:250::/35").unwrap(),
+        ]);
     }
 
     #[test]

@@ -68,7 +68,10 @@ mod tests {
 
     #[test]
     fn test_cache() {
-        let cache = Cache::new(format!("test-{}", std::process::id()), Duration::from_millis(20));
+        let cache = Cache::new(
+            format!("test-{}", std::process::id()),
+            Duration::from_millis(20),
+        );
         let path = cache.get_path();
         assert!(!path.exists());
         cache.save_str("test").unwrap();

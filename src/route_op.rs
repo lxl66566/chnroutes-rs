@@ -27,6 +27,15 @@ impl RouteAction {
             Self::Delete => "Removing",
         }
     }
+
+    /// Already-satisfied entries are idempotent no-ops, not real failures.
+    fn is_ignorable(self, err: &RouteOpError) -> bool {
+        matches!(
+            (self, err),
+            (Self::Add, RouteOpError::RouteAlreadyExistsError)
+                | (Self::Delete, RouteOpError::RouteNotFoundError)
+        )
+    }
 }
 
 fn default_interface_index() -> Result<u32> {
@@ -122,7 +131,10 @@ impl RouteContext<'_> {
             })
             .with_ifindex(self.ifindex);
 
-        self.handle.add(route_item).await.map_err(classify_add_error)
+        self.handle
+            .add(route_item)
+            .await
+            .map_err(classify_add_error)
     }
 
     /// Delete route entry from routing table.
@@ -204,9 +216,7 @@ async fn apply_routes(routes: &[IpNet], action: RouteAction) -> Result<()> {
     while let Some((route, result)) = stream.next().await {
         match result {
             Ok(()) => applied += 1,
-            // These two cases are idempotent no-ops, not real failures.
-            Err(RouteOpError::RouteAlreadyExistsError) if action == RouteAction::Add => ignored += 1,
-            Err(RouteOpError::RouteNotFoundError) if action == RouteAction::Delete => ignored += 1,
+            Err(err) if action.is_ignorable(&err) => ignored += 1,
             Err(err) => {
                 failed += 1;
                 error!("Error while applying route {route}: {err:?}");
