@@ -11,8 +11,8 @@ RIIR version of [chnroutes](https://github.com/fivesheep/chnroutes).
 
 There are several different ways to install chnroutes, you can choose **any of them**.
 
-- Download the file from [Releases](https://github.com/lxl66566/chnroutes-rs/releases), unzip it, and put it in `C:\Windows\System32` (if you are using windows) or any `Path` directory.
-- Using [bpm](https://github.com/lxl66566/bpm):
+- Download the file from [Releases](https://github.com/lxl66566/chnroutes-rs/releases), unzip it, and put it in any directory in `PATH` env.
+- Using [bpm](https://github.com/lxl66566/bpm-rs):
   ```sh
   bpm i https://github.com/lxl66566/chnroutes-rs -b chnroutes
   ```
@@ -32,7 +32,7 @@ There are several different ways to install chnroutes, you can choose **any of t
 
 ## Usage
 
-### Command line
+### Cli
 
 ```sh
 chnroutes export -p windows         # Export routing table manipulation scripts, almost identical to original chnroutes.py (not recommended)

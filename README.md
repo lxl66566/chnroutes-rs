@@ -2,7 +2,7 @@
 
 简体中文 | [English](./README_en.md)
 
-[chnroutes](https://github.com/fivesheep/chnroutes) 的 Rewrite it in Rust 版本。
+[chnroutes](https://github.com/fivesheep/chnroutes) 的 Rust 版本。
 
 - 本地缓存路由信息，每 7 天更新
 - 调用 API，快速（windows 1w 条写入仅需 30ms）
@@ -11,8 +11,8 @@
 
 有几种不同方法可以安装此程序，您可以选择其中**任意一种**。
 
-- 在 [Releases](https://github.com/lxl66566/chnroutes-rs/releases) 中下载文件并解压，放入 `C:\Windows\System32`（如果您用的是 windows）或任意 `Path` 目录下。
-- 使用 [bpm](https://github.com/lxl66566/bpm)：
+- 在 [Releases](https://github.com/lxl66566/chnroutes-rs/releases) 中下载文件并解压，放入任意 `PATH` 环境变量声明的目录下。
+- 使用 [bpm](https://github.com/lxl66566/bpm-rs)：
   ```sh
   bpm i https://github.com/lxl66566/chnroutes-rs -b chnroutes
   ```
@@ -32,7 +32,7 @@
 
 ## 使用
 
-### 命令行
+### Cli
 
 ```sh
 chnroutes export -p windows         # 导出路由表操作脚本，与原版 chnroutes.py 功能几乎一致（不推荐使用）
@@ -42,7 +42,7 @@ chnroutes down                      # 移除路由表项
 
 由于在 `up` 和 `down` 时直接调用系统 API，速度非常快，建议直接使用此方式，而不是原版的导出脚本执行。此方式需要管理员/root 权限。
 
-### 库
+### Lib
 
 查看 [examples](./examples)
 
