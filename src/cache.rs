@@ -32,12 +32,18 @@ impl Cache {
     /// Load file from cache, if the file not found or expired, return [`None`]
     pub fn load(&self) -> Result<Option<Vec<u8>>, CacheError> {
         let path = self.get_path();
-        if path.exists() {
-            let metadata = std::fs::metadata(&path)?;
-            let last_modified = metadata.modified()?;
-            if last_modified.elapsed().unwrap_or(self.expire_time) < self.expire_time {
-                return Ok(Some(std::fs::read(path)?));
-            }
+        if !path.exists() {
+            return Ok(None);
+        }
+        // A modification time in the future (clock skew) makes `elapsed` fail;
+        // treat such entries as expired instead of keeping them forever.
+        let fresh = std::fs::metadata(&path)?
+            .modified()
+            .ok()
+            .and_then(|modified| modified.elapsed().ok())
+            .is_some_and(|age| age < self.expire_time);
+        if fresh {
+            return Ok(Some(std::fs::read(path)?));
         }
         Ok(None)
     }
@@ -47,7 +53,6 @@ impl Cache {
         Ok(s)
     }
 
-    #[allow(unused)]
     pub fn remove(&self) -> Result<(), CacheError> {
         let path = self.get_path();
         if path.exists() {
@@ -63,7 +68,7 @@ mod tests {
 
     #[test]
     fn test_cache() {
-        let cache = Cache::new("test", Duration::from_millis(20));
+        let cache = Cache::new(format!("test-{}", std::process::id()), Duration::from_millis(20));
         let path = cache.get_path();
         assert!(!path.exists());
         cache.save_str("test").unwrap();

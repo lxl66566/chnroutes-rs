@@ -3,16 +3,14 @@ use std::{io::Cursor, net::IpAddr, str::FromStr, time::Duration};
 use ipnet::IpNet;
 use log::{info, warn};
 
-use crate::cache::Cache;
+use crate::{cache::Cache, error::CacheError};
 
 /// Fetch IP data from apnic.net, add it to cache and return the parsed data
 pub fn fetch_ip_data() -> crate::error::Result<Vec<IpNet>> {
     let cache = Cache::new("apnic", Duration::from_secs(7 * 24 * 60 * 60));
-    if let Some(data) = cache.load()? {
+    if let Some(data) = load_cache(&cache)? {
         info!("Loading data from cache ...");
-        return Ok(parse_ip_data(
-            &String::from_utf8(data).expect("The cache file should be valid UTF-8."),
-        ));
+        return Ok(parse_ip_data(&data));
     }
     info!("Fetching data from apnic.net ...");
     let client = reqwest::blocking::Client::builder()
@@ -33,12 +31,27 @@ pub fn fetch_ip_data() -> crate::error::Result<Vec<IpNet>> {
         Ok(Err(e)) | Err(e) => {
             warn!("Fetching data from apnic.net failed, use built-in apnic data: {e:?}");
             let compressed_bytes = include_bytes!(concat!(env!("OUT_DIR"), "/apnic.zst"));
-            let de = zstd::stream::decode_all(Cursor::new(compressed_bytes)).unwrap();
+            let de = zstd::stream::decode_all(Cursor::new(compressed_bytes))?;
             cache.save(&de)?;
             Ok(parse_ip_data(
-                &String::from_utf8(de).expect("The cache file should be valid UTF-8."),
+                &String::from_utf8(de).expect("The built-in data should be valid UTF-8."),
             ))
         },
+    }
+}
+
+/// Load the cached source file, treating a corrupted (non UTF-8) cache as a miss.
+fn load_cache(cache: &Cache) -> Result<Option<String>, CacheError> {
+    match cache.load()? {
+        Some(bytes) => match String::from_utf8(bytes) {
+            Ok(text) => Ok(Some(text)),
+            Err(_) => {
+                warn!("Cache file is corrupted, removing it and refetching ...");
+                cache.remove()?;
+                Ok(None)
+            },
+        },
+        None => Ok(None),
     }
 }
 
@@ -87,5 +100,16 @@ mod tests {
                 .as_str(),
         );
         assert_eq!(results[0], IpNet::from_str("1.0.1.0/24").unwrap());
+    }
+
+    #[test]
+    fn test_load_corrupted_cache() {
+        let cache = Cache::new(
+            format!("corrupted-{}", std::process::id()),
+            Duration::from_secs(60),
+        );
+        cache.save(&[0xff, 0xfe]).unwrap();
+        assert!(load_cache(&cache).unwrap().is_none());
+        cache.remove().unwrap();
     }
 }
