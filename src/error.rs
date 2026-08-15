@@ -29,6 +29,8 @@ pub enum RouteOpError {
     NoGatewayError,
     #[error("cannot create handle")]
     HandleInitError,
+    #[error("failed to apply {failed} route(s)")]
+    ApplyError { failed: usize },
     #[error("Get default interface error: {0}")]
     GetInterfaceError(String),
     #[error("Route Already exists")]

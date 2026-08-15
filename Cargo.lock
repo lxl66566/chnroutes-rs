@@ -239,7 +239,6 @@ dependencies = [
  "log",
  "net-route",
  "netdev",
- "once-fn",
  "pretty_env_logger",
  "reqwest",
  "thiserror 2.0.20",
@@ -1259,18 +1258,6 @@ checksum = "7216bd11cbda54ccabcab84d523dc93b858ec75ecfb3a7d89513fa22464da396"
 dependencies = [
  "bitflags",
  "objc2-core-foundation",
-]
-
-[[package]]
-name = "once-fn"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc3537c49574aefd7911d17ccf83d82a3c9642242b844c1641521d964fcc1d5a"
-dependencies = [
- "heck",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
 ]
 
 [[package]]

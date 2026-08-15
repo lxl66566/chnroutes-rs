@@ -1,25 +1,38 @@
-use std::{
-    net::{IpAddr, Ipv4Addr, Ipv6Addr},
-    sync::OnceLock,
-};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-use futures_util::{TryStreamExt, stream::FuturesOrdered};
+use futures_util::{StreamExt, stream};
 use ipnet::IpNet;
+use log::{error, info};
 use net_route::{Handle, Route};
-use tokio::sync::OnceCell;
+use netdev::get_default_interface;
 
 use crate::error::RouteOpError;
-pub static GATEWAY: OnceCell<(Option<Ipv4Addr>, Option<Ipv6Addr>)> = OnceCell::const_new();
-pub static INTERFACE_INDEX: OnceLock<u32> = OnceLock::new();
-use log::{error, info};
-use netdev::get_default_interface;
-use once_fn::once;
+
+/// Maximum number of route table operations in flight at once.
+const MAX_CONCURRENT_ROUTE_OPS: usize = 64;
 
 type Result<T> = std::result::Result<T, RouteOpError>;
 
-#[once]
-fn get_interface_index() -> std::result::Result<u32, String> {
-    get_default_interface().map(|x| x.index)
+/// The kind of a route table operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RouteAction {
+    Add,
+    Delete,
+}
+
+impl RouteAction {
+    fn verb(self) -> &'static str {
+        match self {
+            Self::Add => "Adding",
+            Self::Delete => "Removing",
+        }
+    }
+}
+
+fn default_interface_index() -> Result<u32> {
+    get_default_interface()
+        .map(|x| x.index)
+        .map_err(RouteOpError::GetInterfaceError)
 }
 
 /// Get default gateway ipv4 and ipv6.
@@ -45,124 +58,156 @@ pub async fn get_gateway(handle: &Handle) -> Result<(Option<Ipv4Addr>, Option<Ip
     Ok((v4, v6))
 }
 
+/// Shared context for route table operations: the OS handle, the default
+/// interface index, and the default gateways (unresolved for deletions).
+pub struct RouteContext<'a> {
+    handle: &'a Handle,
+    ifindex: u32,
+    gateways: (Option<Ipv4Addr>, Option<Ipv6Addr>),
+}
+
+impl RouteContext<'_> {
+    /// Create a context for adding routes, resolving the default gateways.
+    pub async fn for_add(handle: &Handle) -> Result<RouteContext<'_>> {
+        Ok(RouteContext {
+            handle,
+            ifindex: default_interface_index()?,
+            gateways: get_gateway(handle).await?,
+        })
+    }
+
+    /// Create a context for deleting routes; gateways are not needed here.
+    pub fn for_delete(handle: &Handle) -> Result<RouteContext<'_>> {
+        Ok(RouteContext {
+            handle,
+            ifindex: default_interface_index()?,
+            gateways: (None, None),
+        })
+    }
+
+    /// Add one route entry to routing table.
+    pub async fn add(&self, route: &IpNet) -> Result<()> {
+        let (v4, v6) = self.gateways;
+        let route_item = &Route::new(route.addr(), route.prefix_len())
+            // deal with ipv4 and ipv6
+            .with_gateway(if route.addr().is_ipv4() {
+                IpAddr::from(v4.ok_or(RouteOpError::NoGatewayError)?)
+            } else {
+                #[cfg(not(windows))]
+                {
+                    IpAddr::from(v6.ok_or(RouteOpError::NoGatewayError)?)
+                }
+                #[cfg(windows)]
+                {
+                    // on windows, gateway can be ipv4 while destination is ipv6
+                    if let Some(g) = v6 {
+                        IpAddr::from(g)
+                    } else if let Some(g) = v4 {
+                        IpAddr::from(g)
+                    } else {
+                        return Err(RouteOpError::NoGatewayError);
+                    }
+                }
+            })
+            .with_ifindex(self.ifindex);
+
+        self.handle.add(route_item).await.map_err(classify_add_error)
+    }
+
+    /// Delete route entry from routing table.
+    pub async fn delete(&self, route: &IpNet) -> Result<()> {
+        let route_item = &Route::new(route.addr(), route.prefix_len()).with_ifindex(self.ifindex);
+        self.handle
+            .delete(route_item)
+            .await
+            .map_err(classify_delete_error)
+    }
+}
+
+/// net-route surfaces OS failures as plain `std::io::Error`s, so map the
+/// well-known cases onto dedicated error variants.
+fn classify_add_error(err: std::io::Error) -> RouteOpError {
+    // Received a netlink error message File exists (os error 17)
+    // We cannot use other way to deal with this error because net-route crate turns
+    // it into std::io::Error with no more information.
+    if err.kind() == std::io::ErrorKind::Other && err.to_string().contains("exists") {
+        return RouteOpError::RouteAlreadyExistsError;
+    }
+    err.into()
+}
+
+fn classify_delete_error(err: std::io::Error) -> RouteOpError {
+    if err.kind() == std::io::ErrorKind::NotFound {
+        return RouteOpError::RouteNotFoundError;
+    }
+    err.into()
+}
+
 /// Add one route entry to routing table.
 pub async fn add_route(handle: &Handle, route: &IpNet) -> Result<()> {
-    let gateway = GATEWAY.get_or_try_init(|| get_gateway(handle)).await?;
-    let route_item = &Route::new(route.addr(), route.prefix_len())
-        // deal with ipv4 and ipv6
-        .with_gateway(if route.addr().is_ipv4() {
-            IpAddr::from(gateway.0.ok_or(RouteOpError::NoGatewayError)?)
-        } else {
-            #[cfg(not(windows))]
-            {
-                IpAddr::from(gateway.1.ok_or(RouteOpError::NoGatewayError)?)
-            }
-            #[cfg(windows)]
-            {
-                // on windows, gateway can be ipv4 while destination is ipv6
-                if let Some(g) = gateway.1 {
-                    IpAddr::from(g)
-                } else if let Some(g) = gateway.0 {
-                    IpAddr::from(g)
-                } else {
-                    return Err(RouteOpError::NoGatewayError);
-                }
-            }
-        })
-        .with_ifindex(get_interface_index().map_err(RouteOpError::GetInterfaceError)?);
-
-    // deal with RouteAlreadyExistsError
-    let result = handle.add(route_item).await;
-    if let Err(err) = result {
-        // Received a netlink error message File exists (os error 17)
-        // We cannot use other way to deal with this error because net-route crate turns
-        // it into std::io::Error with no more information.
-        if err.kind() == std::io::ErrorKind::Other && err.to_string().contains("exists") {
-            return Err(RouteOpError::RouteAlreadyExistsError);
-        }
-        return Err(err.into());
-    }
-    Ok(())
+    RouteContext::for_add(handle).await?.add(route).await
 }
 
 /// Delete route entry from routing table.
 pub async fn del_route(handle: &Handle, route: &IpNet) -> Result<()> {
-    let route_item = &Route::new(route.addr(), route.prefix_len())
-        .with_ifindex(get_interface_index().map_err(RouteOpError::GetInterfaceError)?);
-    let result = handle.delete(route_item).await;
+    RouteContext::for_delete(handle)?.delete(route).await
+}
 
-    // deal with RouteNotFoundError
-    if let Err(err) = result {
-        if err.kind() == std::io::ErrorKind::NotFound {
-            return Err(RouteOpError::RouteNotFoundError);
+/// Apply multiple routes to the routing table.
+///
+/// Individual failures do not abort the batch: already-satisfied entries are
+/// counted as ignored, other errors are logged, and the batch returns
+/// [`RouteOpError::ApplyError`] if any route failed.
+async fn apply_routes(routes: &[IpNet], action: RouteAction) -> Result<()> {
+    info!("{} {} routes...", action.verb(), routes.len());
+    let handle = Handle::new().map_err(|_| RouteOpError::HandleInitError)?;
+    let ctx = match action {
+        RouteAction::Add => RouteContext::for_add(&handle).await?,
+        RouteAction::Delete => RouteContext::for_delete(&handle)?,
+    };
+
+    let mut applied = 0;
+    let mut ignored = 0;
+    let mut failed = 0;
+    let mut stream = stream::iter(routes.iter().map(|route| {
+        let ctx = &ctx;
+        async move {
+            let result = match action {
+                RouteAction::Add => ctx.add(route).await,
+                RouteAction::Delete => ctx.delete(route).await,
+            };
+            (route, result)
         }
-        return Err(err.into());
+    }))
+    .buffer_unordered(MAX_CONCURRENT_ROUTE_OPS);
+
+    while let Some((route, result)) = stream.next().await {
+        match result {
+            Ok(()) => applied += 1,
+            // These two cases are idempotent no-ops, not real failures.
+            Err(RouteOpError::RouteAlreadyExistsError) if action == RouteAction::Add => ignored += 1,
+            Err(RouteOpError::RouteNotFoundError) if action == RouteAction::Delete => ignored += 1,
+            Err(err) => {
+                failed += 1;
+                error!("Error while applying route {route}: {err:?}");
+            },
+        }
+    }
+    info!("Routes applied: {applied}, ignored: {ignored}, failed: {failed}.");
+    if failed > 0 {
+        return Err(RouteOpError::ApplyError { failed });
     }
     Ok(())
 }
 
 /// Add multiple routes to routing table.
 pub async fn add_routes(routes: &[IpNet]) -> Result<()> {
-    info!("Adding {} routes...", routes.len());
-    let handle = Box::leak(Box::new(
-        Handle::new().map_err(|_| RouteOpError::HandleInitError)?,
-    ));
-    let mut futures = routes
-        .iter()
-        .map(|r| add_route(handle, r))
-        .collect::<FuturesOrdered<_>>();
-    let mut index = 1;
-    let mut ignored = 0;
-    loop {
-        match futures.try_next().await {
-            Ok(Some(())) => {
-                index += 1;
-            },
-            Ok(None) => {
-                break;
-            },
-            Err(RouteOpError::RouteAlreadyExistsError) => {
-                ignored += 1;
-            },
-            Err(err) => {
-                error!("Error while adding {} th route: {:?}", index, err);
-                return Err(err);
-            },
-        }
-    }
-    info!("Routes added success, ignored: {}.", ignored);
-    Ok(())
+    apply_routes(routes, RouteAction::Add).await
 }
 
 /// Delete multiple routes from routing table.
 pub async fn del_routes(routes: &[IpNet]) -> Result<()> {
-    info!("Removing {} routes...", routes.len());
-    let handle = Handle::new().map_err(|_| RouteOpError::HandleInitError)?;
-    let mut futures = routes
-        .iter()
-        .map(|r| del_route(&handle, r))
-        .collect::<FuturesOrdered<_>>();
-    let mut index = 1;
-    let mut ignored = 0;
-    loop {
-        match futures.try_next().await {
-            Ok(Some(())) => {
-                index += 1;
-            },
-            Ok(None) => {
-                break;
-            },
-            Err(RouteOpError::RouteNotFoundError) => {
-                ignored += 1;
-            },
-            Err(err) => {
-                error!("Error while removing {} th route: {:?}", index, err);
-                return Err(err);
-            },
-        }
-    }
-    info!("Routes removed success, ignored: {}.", ignored);
-    Ok(())
+    apply_routes(routes, RouteAction::Delete).await
 }
 
 #[cfg(test)]
